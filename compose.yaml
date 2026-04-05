@@ -1,0 +1,10 @@
+services:
+  postgres:
+    image: 'postgres:latest'
+    environment:
+      - 'POSTGRES_DB=verity-db'
+      - 'POSTGRES_PASSWORD=veritypass123'
+      - 'POSTGRES_USER=illia'
+      - 'PGTZ=Europe/Kyiv'
+    ports:
+      - '5432'
