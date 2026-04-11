@@ -6,6 +6,14 @@ using GitLab CI/CD pipelines. Students upload code, it runs in an isolated
 Docker container via GitLab CI, and results are returned through a REST API
 consumed by a React frontend. So this is kind of clone of google class but with built-in code checker.
 
+## Local Dev
+
+PostgreSQL credentials (from compose.yaml):
+- host: localhost:5432, user: illia, password: graderpass123, database: grader-db
+- Connect: `PGPASSWORD=graderpass123 psql -h localhost -U illia -d grader-db`
+
+Run the app: `GRADER_JWT_SECRET=test-secret-at-least-32-chars-long ./mvnw spring-boot:run`
+
 ## Tech Stack
 - Java 25, Spring Boot 3.4.x
 - PostgreSQL 16, Flyway migrations
