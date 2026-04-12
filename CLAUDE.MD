@@ -1,10 +1,18 @@
-# Verity — Automated Lab Submission and Grading System
+# Grader — Automated Lab Submission and Grading System
 
 ## Project Overview
-Verity is a web-based system for automated checking of student lab submissions
+Grader is a web-based system for automated checking of student lab submissions
 using GitLab CI/CD pipelines. Students upload code, it runs in an isolated
 Docker container via GitLab CI, and results are returned through a REST API
-consumed by a React frontend.
+consumed by a React frontend. So this is kind of clone of google class but with built-in code checker.
+
+## Local Dev
+
+PostgreSQL credentials (from compose.yaml):
+- host: localhost:5432, user: illia, password: graderpass123, database: grader-db
+- Connect: `PGPASSWORD=graderpass123 psql -h localhost -U illia -d grader-db`
+
+Run the app: `GRADER_JWT_SECRET=test-secret-at-least-32-chars-long ./mvnw spring-boot:run`
 
 ## Tech Stack
 - Java 25, Spring Boot 3.4.x
@@ -12,16 +20,6 @@ consumed by a React frontend.
 - React 18 + TypeScript + MUI v5
 - Docker Compose for deployment
 - GitLab CE (self-hosted) for CI/CD pipeline execution
-
-## Package Structure
-ua.kpi.verity/
-auth/         → JWT utils, security config, login endpoint
-user/         → User entity, repository
-assignment/   → Assignment entity, repo, service, controller
-submission/   → Submission entity, repo, service, controller
-gitlab/       → GitLabApiClient, WebhookHandler, LogParser
-result/       → TestResult entity, repository
-common/       → GlobalExceptionHandler, base DTOs, constants
 
 ## Code Conventions
 - All code, comments, and Javadoc in English
@@ -44,18 +42,10 @@ common/       → GlobalExceptionHandler, base DTOs, constants
 
 ## Security
 - JWT-based auth, no Keycloak for MVP
-- JWT secret loaded from env variable: VERITY_JWT_SECRET
+- JWT secret loaded from env variable: GRADER_JWT_SECRET
 - Token expiry: 24 hours
 - Two roles: STUDENT, TEACHER
 - Hardcoded users in data.sql for demo purposes
-
-## GitLab Integration
-- Self-hosted GitLab at URL from env variable: GITLAB_URL
-- API token from env variable: GITLAB_TOKEN
-- Webhook secret from env variable: GITLAB_WEBHOOK_SECRET
-- Each submission creates/updates a dedicated GitLab project
-- CI config template stored in assignments.ci_config_template column
-- Pipeline results parsed by finding lines starting with PASS: or FAIL:
 
 ## Error Handling
 - All exceptions handled in GlobalExceptionHandler (@RestControllerAdvice)
@@ -67,11 +57,3 @@ common/       → GlobalExceptionHandler, base DTOs, constants
 - Use Mockito for mocking repositories and external clients
 - Test class naming: {ClassName}Test
 - At minimum test: happy path + not found case + validation error case
-
-## MVP Scope (do not add anything beyond this)
-- Login (student + teacher)
-- Student: view assignments, upload solution file, view test results
-- Teacher: view all submissions per assignment, see pass/fail per student
-- GitLab pipeline trigger and result parsing
-- No Keycloak, no complexity analysis, no academic groups management
-```

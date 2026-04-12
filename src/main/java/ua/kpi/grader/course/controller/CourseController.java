@@ -1,0 +1,94 @@
+package ua.kpi.grader.course.controller;
+
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
+import ua.kpi.grader.course.dto.*;
+import ua.kpi.grader.course.service.CourseService;
+import ua.kpi.grader.security.UserPrincipal;
+
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/courses")
+@RequiredArgsConstructor
+public class CourseController {
+
+    private final CourseService courseService;
+
+    @GetMapping
+    public ResponseEntity<List<CourseResponse>> listCourses() {
+        return ResponseEntity.ok(courseService.findAllActive());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<CourseDetailResponse> getCourse(@PathVariable Long id) {
+        return ResponseEntity.ok(courseService.findById(id));
+    }
+
+    @PostMapping
+    public ResponseEntity<CourseResponse> createCourse(
+            @RequestBody @Valid CreateCourseRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(courseService.createCourse(request, principal.userId()));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<CourseResponse> updateCourse(
+            @PathVariable Long id,
+            @RequestBody @Valid UpdateCourseRequest request) {
+        return ResponseEntity.ok(courseService.updateCourse(id, request));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deactivateCourse(@PathVariable Long id) {
+        courseService.deactivateCourse(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/students/{studentId}")
+    public ResponseEntity<EnrolledStudentResponse> enrollStudent(
+            @PathVariable Long id,
+            @PathVariable Long studentId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(courseService.enrollStudent(id, studentId));
+    }
+
+    @DeleteMapping("/{id}/students/{studentId}")
+    public ResponseEntity<Void> unenrollStudent(
+            @PathVariable Long id,
+            @PathVariable Long studentId) {
+        courseService.unenrollStudent(id, studentId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/students")
+    public ResponseEntity<List<EnrolledStudentResponse>> listStudents(@PathVariable Long id) {
+        return ResponseEntity.ok(courseService.findStudents(id));
+    }
+
+    @PostMapping("/{id}/teachers/{teacherId}")
+    public ResponseEntity<CourseTeacherResponse> addTeacher(
+            @PathVariable Long id,
+            @PathVariable Long teacherId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(courseService.addTeacher(id, teacherId));
+    }
+
+    @DeleteMapping("/{id}/teachers/{teacherId}")
+    public ResponseEntity<Void> removeTeacher(
+            @PathVariable Long id,
+            @PathVariable Long teacherId) {
+        courseService.removeTeacher(id, teacherId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/teachers")
+    public ResponseEntity<List<CourseTeacherResponse>> listTeachers(@PathVariable Long id) {
+        return ResponseEntity.ok(courseService.findTeachers(id));
+    }
+}
