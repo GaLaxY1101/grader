@@ -4,9 +4,11 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import ua.kpi.grader.course.dto.*;
 import ua.kpi.grader.course.service.CourseService;
+import ua.kpi.grader.security.UserPrincipal;
 
 import java.util.List;
 
@@ -29,9 +31,10 @@ public class CourseController {
 
     @PostMapping
     public ResponseEntity<CourseResponse> createCourse(
-            @RequestBody @Valid CreateCourseRequest request) {
+            @RequestBody @Valid CreateCourseRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(courseService.createCourse(request));
+                .body(courseService.createCourse(request, principal.userId()));
     }
 
     @PutMapping("/{id}")

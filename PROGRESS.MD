@@ -57,11 +57,14 @@ Tables created so far:
   - GET    /api/groups/{id}/students            → list students (200)
 - [x] Unit tests: GroupServiceTest (18 tests — happy path, 404, 409 for all ops)
 
-### Session 4 — Auth (JWT) ⬜
-- [ ] Spring Security JWT filter
+### Session 4 — Auth (JWT) 🔄
+- [x] Spring Security JWT filter (`JwtAuthenticationFilter` — `OncePerRequestFilter`, Bearer token extraction, sets `SecurityContextHolder`)
+- [x] `JwtService`: parses + validates tokens via JJWT 0.12.6, secret from env `GRADER_JWT_SECRET`
+- [x] `UserPrincipal` record implementing Spring Security `UserDetails` (userId, email, role)
+- [x] `SecurityConfig`: stateless session, CSRF/form/basic disabled, Swagger endpoints permitted, all others require auth
+- [x] Role-based access control on all existing endpoints (authenticated via JWT)
 - [ ] Login endpoint: POST /api/auth/login → returns token
-- [ ] Role-based access control on existing endpoints
-- [ ] Protected endpoint test
+- [ ] Protected endpoint test (integration test with real token)
 
 ### Session 5 — Course + Assignment module ✅
 - [x] V5__init_courses_and_assignments.sql: 6 tables (courses, course_enrollments, course_teachers, assignments, programming_tasks, file_upload_tasks)
@@ -90,6 +93,9 @@ Tables created so far:
 - [x] Assignment type via optional child records: programmingTask / fileUploadTask — no type enum or column
 - [x] 409 on duplicate enrollment / duplicate teacher add
 - [x] Soft-delete pattern: is_active=false for courses and assignments
+- [x] Bug fixes (code review): null-guard optional fields in `Course.update()` and `Assignment.update()`, enrollment list filtered to `ACTIVE` only, `@NotNull @Min(1)` on `UpdateAssignmentRequest.maxScore`
+- [x] `createCourse` / `createAssignment` now resolve teacher from authenticated JWT principal (no hardcoded IDs)
+- [x] Unit tests: CourseServiceTest (15 tests), AssignmentServiceTest (10 tests)
 
 ### Session 6 — CI/CD module ⬜
 - [ ] GitLab API client

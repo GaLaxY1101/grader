@@ -4,11 +4,13 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import ua.kpi.grader.course.dto.AssignmentResponse;
 import ua.kpi.grader.course.dto.CreateAssignmentRequest;
 import ua.kpi.grader.course.dto.UpdateAssignmentRequest;
 import ua.kpi.grader.course.service.AssignmentService;
+import ua.kpi.grader.security.UserPrincipal;
 
 import java.util.List;
 
@@ -21,9 +23,10 @@ public class AssignmentController {
     @PostMapping("/api/courses/{courseId}/assignments")
     public ResponseEntity<AssignmentResponse> createAssignment(
             @PathVariable Long courseId,
-            @RequestBody @Valid CreateAssignmentRequest request) {
+            @RequestBody @Valid CreateAssignmentRequest request,
+            @AuthenticationPrincipal UserPrincipal principal) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(assignmentService.createAssignment(courseId, request));
+                .body(assignmentService.createAssignment(courseId, request, principal.userId()));
     }
 
     @GetMapping("/api/courses/{courseId}/assignments")

@@ -65,11 +65,11 @@ public class Course {
     public void update(String name, String description, Integer academicYear, Integer semester,
                        LocalDate startDate, LocalDate endDate) {
         this.name = name;
-        this.description = description;
         this.academicYear = academicYear;
         this.semester = semester;
-        this.startDate = startDate;
-        this.endDate = endDate;
+        if (description != null) this.description = description;
+        if (startDate != null) this.startDate = startDate;
+        if (endDate != null) this.endDate = endDate;
     }
 
     /**

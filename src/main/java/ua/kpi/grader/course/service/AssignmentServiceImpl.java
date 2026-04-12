@@ -65,23 +65,21 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     /**
      * Creates a new assignment and optional task details for a course in a single transaction.
-     * TODO: replace hardcoded teacherId = 1L with authenticated user once JWT is wired up
      *
-     * @param courseId the course ID
-     * @param request  the creation payload
+     * @param courseId      the course ID
+     * @param request       the creation payload
+     * @param teacherUserId the user ID of the authenticated teacher
      * @return the persisted AssignmentResponse DTO
-     * @throws ResourceNotFoundException if the course does not exist
+     * @throws ResourceNotFoundException if the course or teacher does not exist
      */
     @Override
     @Transactional
-    public AssignmentResponse createAssignment(Long courseId, CreateAssignmentRequest request) {
+    public AssignmentResponse createAssignment(Long courseId, CreateAssignmentRequest request, Long teacherUserId) {
         Course course = findCourseOrThrow(courseId);
 
-        // TODO: replace hardcoded teacherId = 1L with authenticated user
-        Long teacherId = 1L;
-        Teacher teacher = teacherRepository.findById(teacherId)
+        Teacher teacher = teacherRepository.findByUserId(teacherUserId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Teacher not found with id: " + teacherId));
+                        "Teacher not found for user: " + teacherUserId));
 
         Assignment assignment = Assignment.builder()
                 .course(course)

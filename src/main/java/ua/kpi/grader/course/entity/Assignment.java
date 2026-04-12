@@ -68,9 +68,9 @@ public class Assignment {
      */
     public void update(String title, String description, Integer maxScore, OffsetDateTime deadline) {
         this.title = title;
-        this.description = description;
         this.maxScore = maxScore;
-        this.deadline = deadline;
+        if (description != null) this.description = description;
+        if (deadline != null) this.deadline = deadline;
     }
 
     /**

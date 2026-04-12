@@ -74,20 +74,19 @@ public class CourseServiceImpl implements CourseService {
     }
 
     /**
-     * Creates a new course.
-     * TODO: replace hardcoded teacherId with authenticated principal once JWT is wired up
+     * Creates a new course owned by the given teacher (identified by their user ID).
      *
-     * @param request the creation payload
+     * @param request       the creation payload
+     * @param teacherUserId the user ID of the authenticated teacher
      * @return the persisted CourseResponse DTO
+     * @throws ResourceNotFoundException if no teacher profile exists for the given user
      */
     @Override
     @Transactional
-    public CourseResponse createCourse(CreateCourseRequest request) {
-        // TODO: replace hardcoded teacherId = 1L with authenticated user
-        Long teacherId = 1L;
-        Teacher teacher = teacherRepository.findById(teacherId)
+    public CourseResponse createCourse(CreateCourseRequest request, Long teacherUserId) {
+        Teacher teacher = teacherRepository.findByUserId(teacherUserId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Teacher not found with id: " + teacherId));
+                        "Teacher not found for user: " + teacherUserId));
 
         Course course = Course.builder()
                 .name(request.name())
