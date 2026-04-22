@@ -20,9 +20,9 @@ public interface AssignmentService {
 
     /**
      * Creates a new assignment (and optional task details) for a course,
-     * owned by the given teacher (identified by their user ID).
+     * owned by the currently authenticated teacher.
      */
-    AssignmentResponse createAssignment(Long courseId, CreateAssignmentRequest request, Long teacherUserId);
+    AssignmentResponse createAssignment(Long courseId, CreateAssignmentRequest request);
 
     /**
      * Updates mutable fields of an existing assignment.

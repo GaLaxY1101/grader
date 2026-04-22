@@ -15,6 +15,7 @@ import ua.kpi.grader.course.repository.CourseTeacherRepository;
 import ua.kpi.grader.user.entity.Student;
 import ua.kpi.grader.user.entity.Teacher;
 import ua.kpi.grader.user.repository.StudentRepository;
+import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.user.repository.TeacherRepository;
 
 import java.util.List;
@@ -29,6 +30,7 @@ public class CourseServiceImpl implements CourseService {
     private final AssignmentRepository assignmentRepository;
     private final TeacherRepository teacherRepository;
     private final StudentRepository studentRepository;
+    private final CurrentUser currentUser;
 
     /**
      * Returns all active courses (is_active = true).
@@ -74,19 +76,22 @@ public class CourseServiceImpl implements CourseService {
     }
 
     /**
-     * Creates a new course owned by the given teacher (identified by their user ID).
+     * Creates a new course owned by the currently authenticated teacher.
+     * The teacher is resolved from the Keycloak JWT email claim.
      *
-     * @param request       the creation payload
-     * @param teacherUserId the user ID of the authenticated teacher
+     * @param request the creation payload
      * @return the persisted CourseResponse DTO
-     * @throws ResourceNotFoundException if no teacher profile exists for the given user
+     * @throws ResourceNotFoundException if no teacher profile exists for the current user
      */
     @Override
     @Transactional
-    public CourseResponse createCourse(CreateCourseRequest request, Long teacherUserId) {
-        Teacher teacher = teacherRepository.findByUserId(teacherUserId)
+    public CourseResponse createCourse(CreateCourseRequest request) {
+        // TODO: resolve Keycloak UUID to internal teacher id
+        // This will be done when we implement user sync in auth module
+        String email = currentUser.getEmail();
+        Teacher teacher = teacherRepository.findByUser_Email(email)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Teacher not found for user: " + teacherUserId));
+                        "Teacher not found for user: " + email));
 
         Course course = Course.builder()
                 .name(request.name())

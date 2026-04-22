@@ -73,7 +73,6 @@ class UserServiceTest {
     private User buildUser(String email, Role role) {
         return User.builder()
                 .email(email)
-                .passwordHash("hash")
                 .firstName("Test")
                 .lastName("User")
                 .role(role)

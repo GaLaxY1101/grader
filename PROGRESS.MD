@@ -8,7 +8,7 @@ JWT (custom, no Keycloak for MVP), GitLab CE (self-hosted), Docker sandbox, Reac
 ## Architecture
 - Modular monolith (Spring Boot), package-per-feature structure
 - DB: PostgreSQL 16, Flyway migrations
-- Auth: JWT (secret from env `GRADER_JWT_SECRET`, 24 h expiry), roles: STUDENT / TEACHER / ADMIN
+- Auth: Keycloak OAuth2 Resource Server — validates Keycloak JWTs, roles from `app_roles` claim
 - Code runner: GitLab CE → GitLab Runner → Docker container
 - Error handling: RFC 7807 Problem Details via `GlobalExceptionHandler`
 
@@ -57,14 +57,17 @@ Tables created so far:
   - GET    /api/groups/{id}/students            → list students (200)
 - [x] Unit tests: GroupServiceTest (18 tests — happy path, 404, 409 for all ops)
 
-### Session 4 — Auth (JWT) 🔄
-- [x] Spring Security JWT filter (`JwtAuthenticationFilter` — `OncePerRequestFilter`, Bearer token extraction, sets `SecurityContextHolder`)
-- [x] `JwtService`: parses + validates tokens via JJWT 0.12.6, secret from env `GRADER_JWT_SECRET`
-- [x] `UserPrincipal` record implementing Spring Security `UserDetails` (userId, email, role)
-- [x] `SecurityConfig`: stateless session, CSRF/form/basic disabled, Swagger endpoints permitted, all others require auth
-- [x] Role-based access control on all existing endpoints (authenticated via JWT)
-- [ ] Login endpoint: POST /api/auth/login → returns token
-- [ ] Protected endpoint test (integration test with real token)
+### Session 4 — Auth (Keycloak JWT) ✅
+- [x] Replaced custom JJWT auth with Keycloak OAuth2 resource server (`spring-boot-starter-oauth2-resource-server`)
+- [x] `KeycloakJwtRoleConverter`: maps `app_roles` JWT claim → Spring Security `ROLE_*` authorities
+- [x] `SecurityConfig`: stateless, CSRF disabled, CORS for `localhost:3000`, `@EnableMethodSecurity`, OAuth2 resource server with JWT converter
+- [x] `CurrentUser` component: extracts userId (Keycloak UUID), email, name from JWT via SecurityContext
+- [x] `@PreAuthorize` on all endpoints — GET → STUDENT/TEACHER/ADMIN, POST/PUT/DELETE → TEACHER/ADMIN
+- [x] Services inject `CurrentUser` for `createCourse` / `createAssignment` — teacher resolved by JWT email claim
+- [x] `GlobalExceptionHandler` handles `AccessDeniedException` (403) and `AuthenticationException` (401)
+- [x] `spring-boot-starter-actuator` added; `/actuator/health` public (200), all other endpoints require Keycloak JWT
+- [x] Verified: unauthenticated → 401, invalid token → 401, health → 200, api-docs → 200
+- [ ] Full integration test with real Keycloak token (when Keycloak runs in Docker Compose)
 
 ### Session 5 — Course + Assignment module ✅
 - [x] V5__init_courses_and_assignments.sql: 6 tables (courses, course_enrollments, course_teachers, assignments, programming_tasks, file_upload_tasks)
@@ -97,20 +100,33 @@ Tables created so far:
 - [x] `createCourse` / `createAssignment` now resolve teacher from authenticated JWT principal (no hardcoded IDs)
 - [x] Unit tests: CourseServiceTest (15 tests), AssignmentServiceTest (10 tests)
 
-### Session 6 — CI/CD module ⬜
+### Session 6 — Submissions module ✅
+- [x] V9__init_submissions.sql: `submissions` table (status, code_content, score, pipeline fields, indexes)
+- [x] `SubmissionStatus` enum: PENDING / RUNNING / PASSED / FAILED / ERROR
+- [x] `Submission` entity with `startPipeline()` and `applyResult()` mutation methods
+- [x] `SubmissionRepository`: fetch-join queries (avoids N+1), list by assignment, find by assignment+student
+- [x] `StudentRepository.findByUser_Email()` added (mirrors TeacherRepository pattern)
+- [x] `SubmissionService` / `SubmissionServiceImpl`: createSubmission, findById, getStatus, listByAssignment, getMyLatestSubmission
+- [x] `SubmissionController` (5 endpoints):
+  - POST   /api/assignments/{id}/submissions       → submit (STUDENT/TEACHER/ADMIN, 201)
+  - GET    /api/submissions/{id}                   → full detail (STUDENT=own only, TEACHER/ADMIN=any)
+  - GET    /api/submissions/{id}/status            → lightweight poll (same access rules)
+  - GET    /api/assignments/{id}/submissions       → all for assignment (TEACHER/ADMIN)
+  - GET    /api/assignments/{id}/submissions/my    → student's latest (STUDENT, 204 if none)
+- [x] Unit tests: SubmissionServiceTest (11 tests — happy path, not-found, ownership denial)
+
+### Session 7 — GitLab CI/CD integration ⬜
 - [ ] GitLab API client
 - [ ] Push code + .gitlab-ci.yml on submission
-- [ ] Webhook endpoint + pipeline result → DB
+- [ ] Webhook endpoint: POST /api/webhooks/gitlab → update status + score
 
-### Session 7 — Results module ⬜
-- [ ] GET /submissions/{id}/status (polling)
-- [ ] GET /submissions/{id}/results
-- [ ] Score calculation
-
-### Session 8 — React frontend ⬜
-- [ ] Vite + React 18 + MUI v5 + Axios
-- [ ] Login + route protection
-- [ ] Course list, submission form, results page
+### Session 8 — React frontend ✅ (in progress, see grader-frontend/PROGRESS.md)
+- [x] Auth (Keycloak login/logout), protected layout, Sidebar/Topbar
+- [x] Course list page + CreateCourse dialog
+- [x] Course detail page (parallel fetch, role-aware sections)
+- [x] Assignment detail page: info card, submission form (student), submission list (teacher/admin)
+- [x] Submission status page with usePolling (3 s interval, stops on terminal status)
+- [x] SubmissionStatusBadge, SubmissionForm, SubmissionList, usePolling hook
 
 ---
 

@@ -16,6 +16,7 @@ import ua.kpi.grader.course.entity.ProgrammingTask;
 import ua.kpi.grader.course.repository.AssignmentRepository;
 import ua.kpi.grader.course.repository.CourseRepository;
 import ua.kpi.grader.user.entity.Teacher;
+import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.user.repository.TeacherRepository;
 
 import java.time.LocalDateTime;
@@ -30,6 +31,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     private final AssignmentRepository assignmentRepository;
     private final CourseRepository courseRepository;
     private final TeacherRepository teacherRepository;
+    private final CurrentUser currentUser;
 
     /**
      * Returns all active assignments for a course.
@@ -65,21 +67,24 @@ public class AssignmentServiceImpl implements AssignmentService {
 
     /**
      * Creates a new assignment and optional task details for a course in a single transaction.
+     * The teacher is resolved from the Keycloak JWT email claim.
      *
-     * @param courseId      the course ID
-     * @param request       the creation payload
-     * @param teacherUserId the user ID of the authenticated teacher
+     * @param courseId the course ID
+     * @param request  the creation payload
      * @return the persisted AssignmentResponse DTO
      * @throws ResourceNotFoundException if the course or teacher does not exist
      */
     @Override
     @Transactional
-    public AssignmentResponse createAssignment(Long courseId, CreateAssignmentRequest request, Long teacherUserId) {
+    public AssignmentResponse createAssignment(Long courseId, CreateAssignmentRequest request) {
         Course course = findCourseOrThrow(courseId);
 
-        Teacher teacher = teacherRepository.findByUserId(teacherUserId)
+        // TODO: resolve Keycloak UUID to internal teacher id
+        // This will be done when we implement user sync in auth module
+        String email = currentUser.getEmail();
+        Teacher teacher = teacherRepository.findByUser_Email(email)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Teacher not found for user: " + teacherUserId));
+                        "Teacher not found for user: " + email));
 
         Assignment assignment = Assignment.builder()
                 .course(course)

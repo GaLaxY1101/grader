@@ -17,6 +17,7 @@ import ua.kpi.grader.course.repository.CourseRepository;
 import ua.kpi.grader.user.entity.Role;
 import ua.kpi.grader.user.entity.Teacher;
 import ua.kpi.grader.user.entity.User;
+import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.user.repository.TeacherRepository;
 
 import java.util.List;
@@ -39,6 +40,9 @@ class AssignmentServiceTest {
 
     @Mock
     private TeacherRepository teacherRepository;
+
+    @Mock
+    private CurrentUser currentUser;
 
     @InjectMocks
     private AssignmentServiceImpl assignmentService;
@@ -100,10 +104,11 @@ class AssignmentServiceTest {
         CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null, null);
         Assignment saved = buildAssignment(7L, course, teacher);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
-        when(teacherRepository.findByUserId(10L)).thenReturn(Optional.of(teacher));
+        when(currentUser.getEmail()).thenReturn("teacher10@test.com");
+        when(teacherRepository.findByUser_Email("teacher10@test.com")).thenReturn(Optional.of(teacher));
         when(assignmentRepository.save(any())).thenReturn(saved);
 
-        AssignmentResponse result = assignmentService.createAssignment(1L, request, 10L);
+        AssignmentResponse result = assignmentService.createAssignment(1L, request);
 
         assertThat(result.title()).isEqualTo("Test Assignment");
         verify(assignmentRepository).save(any(Assignment.class));
@@ -114,7 +119,7 @@ class AssignmentServiceTest {
         CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null, null);
         when(courseRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> assignmentService.createAssignment(99L, request, 10L))
+        assertThatThrownBy(() -> assignmentService.createAssignment(99L, request))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("99");
     }
@@ -124,11 +129,12 @@ class AssignmentServiceTest {
         Course course = buildCourse(1L);
         CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null, null);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
-        when(teacherRepository.findByUserId(99L)).thenReturn(Optional.empty());
+        when(currentUser.getEmail()).thenReturn("nobody@test.com");
+        when(teacherRepository.findByUser_Email("nobody@test.com")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> assignmentService.createAssignment(1L, request, 99L))
+        assertThatThrownBy(() -> assignmentService.createAssignment(1L, request))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("99");
+                .hasMessageContaining("nobody@test.com");
     }
 
     // --- updateAssignment ---
@@ -210,7 +216,6 @@ class AssignmentServiceTest {
     private Teacher buildTeacher(Long teacherId, Long userId) {
         User user = User.builder()
                 .email("teacher" + userId + "@test.com")
-                .passwordHash("hash")
                 .firstName("Teacher")
                 .lastName("Test")
                 .role(Role.TEACHER)

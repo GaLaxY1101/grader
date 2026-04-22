@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ua.kpi.grader.group.dto.CreateGroupRequest;
 import ua.kpi.grader.group.dto.GroupResponse;
@@ -21,16 +22,19 @@ public class GroupController {
     private final GroupService groupService;
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<List<GroupResponse>> listGroups() {
         return ResponseEntity.ok(groupService.findAllActive());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<GroupResponse> getGroup(@PathVariable Long id) {
         return ResponseEntity.ok(groupService.findById(id));
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<GroupResponse> createGroup(
             @RequestBody @Valid CreateGroupRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -38,6 +42,7 @@ public class GroupController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<GroupResponse> updateGroup(
             @PathVariable Long id,
             @RequestBody @Valid UpdateGroupRequest request) {
@@ -45,12 +50,14 @@ public class GroupController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<Void> deactivateGroup(@PathVariable Long id) {
         groupService.deactivateGroup(id);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/students/{studentId}")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<GroupStudentResponse> addStudent(
             @PathVariable Long id,
             @PathVariable Long studentId) {
@@ -59,6 +66,7 @@ public class GroupController {
     }
 
     @DeleteMapping("/{id}/students/{studentId}")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<Void> removeStudent(
             @PathVariable Long id,
             @PathVariable Long studentId) {
@@ -67,6 +75,7 @@ public class GroupController {
     }
 
     @GetMapping("/{id}/students")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<List<GroupStudentResponse>> listStudents(@PathVariable Long id) {
         return ResponseEntity.ok(groupService.findStudents(id));
     }

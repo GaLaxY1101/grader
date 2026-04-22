@@ -61,7 +61,6 @@ class UserRepositoryTest {
     private User buildUser(String email, Role role) {
         return User.builder()
                 .email(email)
-                .passwordHash("hash")
                 .firstName("First")
                 .lastName("Last")
                 .role(role)

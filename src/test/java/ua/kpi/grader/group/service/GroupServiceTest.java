@@ -288,7 +288,6 @@ class GroupServiceTest {
     private Student buildStudent(Long id, String email) {
         User user = User.builder()
                 .email(email)
-                .passwordHash("hash")
                 .firstName("Alice")
                 .lastName("Smith")
                 .role(Role.STUDENT)

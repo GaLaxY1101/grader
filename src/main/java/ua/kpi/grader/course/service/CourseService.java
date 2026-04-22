@@ -17,9 +17,9 @@ public interface CourseService {
     CourseDetailResponse findById(Long id);
 
     /**
-     * Creates a new course owned by the given teacher (identified by their user ID).
+     * Creates a new course owned by the currently authenticated teacher.
      */
-    CourseResponse createCourse(CreateCourseRequest request, Long teacherUserId);
+    CourseResponse createCourse(CreateCourseRequest request);
 
     /**
      * Updates mutable fields of an existing course.

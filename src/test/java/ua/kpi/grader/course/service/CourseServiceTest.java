@@ -19,6 +19,7 @@ import ua.kpi.grader.user.entity.Role;
 import ua.kpi.grader.user.entity.Student;
 import ua.kpi.grader.user.entity.Teacher;
 import ua.kpi.grader.user.entity.User;
+import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.user.repository.StudentRepository;
 import ua.kpi.grader.user.repository.TeacherRepository;
 
@@ -51,6 +52,9 @@ class CourseServiceTest {
 
     @Mock
     private StudentRepository studentRepository;
+
+    @Mock
+    private CurrentUser currentUser;
 
     @InjectMocks
     private CourseServiceImpl courseService;
@@ -101,10 +105,11 @@ class CourseServiceTest {
         Teacher teacher = buildTeacher(1L, 10L);
         CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1, null, null);
         Course saved = buildCourse(5L, "CS101");
-        when(teacherRepository.findByUserId(10L)).thenReturn(Optional.of(teacher));
+        when(currentUser.getEmail()).thenReturn("teacher10@test.com");
+        when(teacherRepository.findByUser_Email("teacher10@test.com")).thenReturn(Optional.of(teacher));
         when(courseRepository.save(any())).thenReturn(saved);
 
-        CourseResponse result = courseService.createCourse(request, 10L);
+        CourseResponse result = courseService.createCourse(request);
 
         assertThat(result.name()).isEqualTo("CS101");
         verify(courseRepository).save(any(Course.class));
@@ -113,11 +118,12 @@ class CourseServiceTest {
     @Test
     void createCourse_throwsResourceNotFoundException_whenTeacherNotFound() {
         CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1, null, null);
-        when(teacherRepository.findByUserId(99L)).thenReturn(Optional.empty());
+        when(currentUser.getEmail()).thenReturn("nobody@test.com");
+        when(teacherRepository.findByUser_Email("nobody@test.com")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> courseService.createCourse(request, 99L))
+        assertThatThrownBy(() -> courseService.createCourse(request))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("99");
+                .hasMessageContaining("nobody@test.com");
     }
 
     // --- updateCourse ---
@@ -315,7 +321,6 @@ class CourseServiceTest {
     private Teacher buildTeacher(Long teacherId, Long userId) {
         User user = User.builder()
                 .email("teacher" + userId + "@test.com")
-                .passwordHash("hash")
                 .firstName("Teacher")
                 .lastName("Test")
                 .role(Role.TEACHER)
@@ -329,7 +334,6 @@ class CourseServiceTest {
     private Student buildStudent(Long studentId, String email) {
         User user = User.builder()
                 .email(email)
-                .passwordHash("hash")
                 .firstName("Student")
                 .lastName("Test")
                 .role(Role.STUDENT)

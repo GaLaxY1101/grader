@@ -1,7 +1,6 @@
 package ua.kpi.grader.user.service;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ua.kpi.grader.common.exception.DuplicateEmailException;
@@ -19,7 +18,6 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
 
     /**
      * Finds a user by their email address.
@@ -60,7 +58,7 @@ public class UserService {
     }
 
     /**
-     * Creates a new user, encoding their password with BCrypt.
+     * Creates a new user. Authentication is managed by Keycloak; no password is stored.
      *
      * @param request the creation payload
      * @return the persisted user as a UserResponse
@@ -73,7 +71,6 @@ public class UserService {
         }
         User user = User.builder()
                 .email(request.email())
-                .passwordHash(passwordEncoder.encode(request.password()))
                 .firstName(request.firstName())
                 .lastName(request.lastName())
                 .phone(request.phone())
