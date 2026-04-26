@@ -115,10 +115,17 @@ Tables created so far:
   - GET    /api/assignments/{id}/submissions/my    → student's latest (STUDENT, 204 if none)
 - [x] Unit tests: SubmissionServiceTest (11 tests — happy path, not-found, ownership denial)
 
-### Session 7 — GitLab CI/CD integration ⬜
-- [ ] GitLab API client
-- [ ] Push code + .gitlab-ci.yml on submission
-- [ ] Webhook endpoint: POST /api/webhooks/gitlab → update status + score
+### Session 7 — GitLab CI/CD integration 🔧
+- [x] GitLab CE + GitLab Runner added to compose.yaml (grader-network, named volumes)
+- [x] `gitlab:` config block in application.yml (baseUrl, token, groupName, webhookSecret, runnerToken)
+- [x] `GitLabProperties` config record + `@EnableConfigurationProperties` in GraderApplication
+- [x] `GitLabApiClient`: RestClient + JdkClientHttpRequestFactory (getOrCreateGroup, createProject, pushFile, registerWebhook, getPipeline, getJobLog, getPipelineJobs)
+- [x] DTOs: `GitLabProjectDto`, `GitLabPipelineDto`, `GitLabJobDto`, `GitLabWebhookPayload`
+- [x] `CiConfigService`: generates .gitlab-ci.yml for C/C++ (custom template override supported)
+- [x] `GitLabInitializer`: auto-creates 'grader' group on startup — verified, group id=2
+- [x] Local secrets via `application-local.properties` (gitignored), `spring-dotenv` removed
+- [ ] Push code + .gitlab-ci.yml on submission (Part B)
+- [ ] Webhook endpoint: POST /api/webhooks/gitlab → update status + score (Part B)
 
 ### Session 8 — React frontend ✅ (in progress, see grader-frontend/PROGRESS.md)
 - [x] Auth (Keycloak login/logout), protected layout, Sidebar/Topbar

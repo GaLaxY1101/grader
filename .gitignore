@@ -22,6 +22,8 @@ hs_err_pid*
 HELP.md
 target/
 spring-shell.log
+application-local.properties
+application-local.yml
 
 # ========================
 # Environment & Secrets

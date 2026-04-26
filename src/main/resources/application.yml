@@ -1,6 +1,8 @@
 spring:
   application:
     name: grader
+  profiles:
+    active: local
 
   datasource:
     url: jdbc:postgresql://localhost:5432/grader-db
@@ -67,3 +69,10 @@ logging:
   level:
     ua.kpi.grader: DEBUG
     org.flywaydb: INFO
+
+gitlab:
+  base-url: ${GITLAB_BASE_URL:http://localhost:8929}
+  token: ${GITLAB_TOKEN:}
+  group-name: ${GITLAB_GROUP_NAME:grader}
+  webhook-secret: ${GITLAB_WEBHOOK_SECRET:webhook-secret-change-me}
+  runner-token: ${GITLAB_RUNNER_TOKEN:}

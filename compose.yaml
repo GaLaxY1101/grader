@@ -25,3 +25,48 @@ services:
       timeout: 5s
       retries: 15
       start_period: 30s
+
+  gitlab:
+    image: gitlab/gitlab-ce:16.9.1-ce.0
+    container_name: grader-gitlab
+    hostname: gitlab.local
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8929'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2224
+        gitlab_rails['lfs_enabled'] = false
+        prometheus_monitoring['enable'] = false
+        grafana['enable'] = false
+        alertmanager['enable'] = false
+    ports:
+      - '8929:8929'
+      - '2224:22'
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    networks:
+      - grader-network
+    shm_size: '256m'
+
+  gitlab-runner:
+    image: gitlab/gitlab-runner:v16.9.1
+    container_name: grader-gitlab-runner
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gitlab_runner_config:/etc/gitlab-runner
+    networks:
+      - grader-network
+    depends_on:
+      - gitlab
+
+volumes:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
+  gitlab_runner_config:
+
+networks:
+  grader-network:
+    driver: bridge
