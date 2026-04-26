@@ -53,6 +53,15 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(401, "Unauthorized", ex.getMessage(), OffsetDateTime.now()));
     }
 
+    @ExceptionHandler(KeycloakIntegrationException.class)
+    public ResponseEntity<ErrorResponse> handleKeycloakIntegration(KeycloakIntegrationException ex) {
+        log.error("Keycloak Admin API error: {}", ex.getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(new ErrorResponse(502, "Bad Gateway",
+                        "Failed to provision user in identity provider: " + ex.getMessage(),
+                        OffsetDateTime.now()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
         String detail = ex.getBindingResult().getFieldErrors().stream()

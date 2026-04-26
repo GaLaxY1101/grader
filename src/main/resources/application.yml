@@ -34,6 +34,10 @@ spring:
 keycloak:
   realm: ${KEYCLOAK_REALM:university-grader}
   base-url: ${KEYCLOAK_BASE_URL:http://localhost:9080}
+  admin:
+    username: ${KEYCLOAK_ADMIN_USERNAME:admin}
+    password: ${KEYCLOAK_ADMIN_PASSWORD:admin}
+    client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
 
   docker:
     compose:

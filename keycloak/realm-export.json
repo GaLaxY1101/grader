@@ -1,0 +1,131 @@
+{
+  "realm": "university-grader",
+  "displayName": "University Grader",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "roles": {
+    "realm": [
+      { "name": "STUDENT",  "description": "Student role",  "composite": false },
+      { "name": "TEACHER",  "description": "Teacher role",  "composite": false },
+      { "name": "ADMIN",    "description": "Admin role",    "composite": false }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "grader-frontend",
+      "name": "Grader Frontend",
+      "description": "Next.js frontend (NextAuth + Keycloak)",
+      "enabled": true,
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "cbzjG1fOgFN5LpyfRdiF58zm9uOV3adm",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "protocol": "openid-connect",
+      "redirectUris": [
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:3000"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*"
+      }
+    }
+  ],
+  "users": [
+    {
+      "username": "admin@grader.ua",
+      "email": "admin@grader.ua",
+      "firstName": "System",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Admin123!", "temporary": false }
+      ],
+      "realmRoles": ["ADMIN"]
+    },
+    {
+      "username": "teacher@grader.ua",
+      "email": "teacher@grader.ua",
+      "firstName": "Olena",
+      "lastName": "Kovalenko",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Teacher123!", "temporary": false }
+      ],
+      "realmRoles": ["TEACHER"]
+    },
+    {
+      "username": "student@grader.ua",
+      "email": "student@grader.ua",
+      "firstName": "Ivan",
+      "lastName": "Petrenko",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Student123!", "temporary": false }
+      ],
+      "realmRoles": ["STUDENT"]
+    },
+    {
+      "username": "anna.shevchenko@grader.ua",
+      "email": "anna.shevchenko@grader.ua",
+      "firstName": "Anna",
+      "lastName": "Shevchenko",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Student123!", "temporary": false }
+      ],
+      "realmRoles": ["STUDENT"]
+    },
+    {
+      "username": "mykola.bondarenko@grader.ua",
+      "email": "mykola.bondarenko@grader.ua",
+      "firstName": "Mykola",
+      "lastName": "Bondarenko",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Student123!", "temporary": false }
+      ],
+      "realmRoles": ["STUDENT"]
+    },
+    {
+      "username": "daryna.moroz@grader.ua",
+      "email": "daryna.moroz@grader.ua",
+      "firstName": "Daryna",
+      "lastName": "Moroz",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Student123!", "temporary": false }
+      ],
+      "realmRoles": ["STUDENT"]
+    },
+    {
+      "username": "artem.savchenko@grader.ua",
+      "email": "artem.savchenko@grader.ua",
+      "firstName": "Artem",
+      "lastName": "Savchenko",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "Student123!", "temporary": false }
+      ],
+      "realmRoles": ["STUDENT"]
+    }
+  ]
+}

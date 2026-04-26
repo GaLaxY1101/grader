@@ -4,7 +4,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ua.kpi.grader.common.exception.DuplicateEmailException;
+import ua.kpi.grader.common.exception.KeycloakIntegrationException;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
+import ua.kpi.grader.keycloak.KeycloakAdminClient;
 import ua.kpi.grader.user.dto.CreateUserRequest;
 import ua.kpi.grader.user.dto.UpdateUserRequest;
 import ua.kpi.grader.user.dto.UserResponse;
@@ -18,6 +20,7 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final KeycloakAdminClient keycloakAdminClient;
 
     /**
      * Finds a user by their email address.
@@ -58,17 +61,28 @@ public class UserService {
     }
 
     /**
-     * Creates a new user. Authentication is managed by Keycloak; no password is stored.
+     * Creates a new user in both the local database and Keycloak.
+     * The Keycloak account is provisioned first; if that fails the local DB insert is not attempted.
+     * A password-reset email is sent so the user can set their own password on first login.
      *
      * @param request the creation payload
      * @return the persisted user as a UserResponse
-     * @throws DuplicateEmailException if the email is already registered
+     * @throws DuplicateEmailException       if the email is already registered locally
+     * @throws KeycloakIntegrationException  if Keycloak provisioning fails
      */
     @Transactional
     public UserResponse createUser(CreateUserRequest request) {
         if (userRepository.existsByEmail(request.email())) {
             throw new DuplicateEmailException(request.email());
         }
+
+        // Provision in Keycloak before writing to the local DB.
+        // If Keycloak fails, the transaction rolls back cleanly (nothing was saved yet).
+        String keycloakUserId = keycloakAdminClient.createUser(
+                request.email(), request.firstName(), request.lastName());
+        keycloakAdminClient.assignRealmRole(keycloakUserId, request.role().name());
+        keycloakAdminClient.sendPasswordResetEmail(keycloakUserId);
+
         User user = User.builder()
                 .email(request.email())
                 .firstName(request.firstName())

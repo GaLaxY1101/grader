@@ -14,7 +14,9 @@ services:
     environment:
       - 'KEYCLOAK_ADMIN=admin'
       - 'KEYCLOAK_ADMIN_PASSWORD=admin'
-    command: start-dev
+    command: start-dev --import-realm
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
     ports:
       - '9080:8080'
     healthcheck:

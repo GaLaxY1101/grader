@@ -1,6 +1,7 @@
 package ua.kpi.grader.user.service;
 
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
+import ua.kpi.grader.keycloak.KeycloakAdminClient;
 import ua.kpi.grader.user.entity.Role;
 import ua.kpi.grader.user.entity.User;
 import ua.kpi.grader.user.repository.UserRepository;
@@ -21,6 +22,9 @@ class UserServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private KeycloakAdminClient keycloakAdminClient;
 
     @InjectMocks
     private UserService userService;
