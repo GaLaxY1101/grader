@@ -7,14 +7,18 @@ public record SubmissionStatusResponse(
         Long id,
         SubmissionStatus status,
         Integer score,
-        String pipelineOutput
+        Integer bestScore,
+        Long latestAttemptId
 ) {
     public static SubmissionStatusResponse from(Submission submission) {
         return new SubmissionStatusResponse(
                 submission.getId(),
                 submission.getStatus(),
                 submission.getScore(),
-                submission.getPipelineOutput()
+                submission.getBestScore(),
+                submission.getLatestAttempt() != null
+                        ? submission.getLatestAttempt().getId()
+                        : null
         );
     }
 }

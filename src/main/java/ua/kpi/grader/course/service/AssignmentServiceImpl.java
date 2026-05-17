@@ -12,7 +12,10 @@ import ua.kpi.grader.course.dto.UpdateAssignmentRequest;
 import ua.kpi.grader.course.entity.Assignment;
 import ua.kpi.grader.course.entity.Course;
 import ua.kpi.grader.course.entity.FileUploadTask;
+import ua.kpi.grader.course.entity.Language;
 import ua.kpi.grader.course.entity.ProgrammingTask;
+import ua.kpi.grader.course.entity.TestCase;
+import ua.kpi.grader.course.entity.TestMode;
 import ua.kpi.grader.course.repository.AssignmentRepository;
 import ua.kpi.grader.course.repository.CourseRepository;
 import ua.kpi.grader.user.entity.Teacher;
@@ -97,12 +100,43 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         if (request.programmingTask() != null) {
             ProgrammingTaskDetails details = request.programmingTask();
+            TestMode testMode = details.testMode() != null ? details.testMode() : TestMode.IO;
+
+            if (details.functionSignature() == null || details.functionSignature().isBlank()) {
+                throw new IllegalArgumentException("Function signature is required for programming tasks");
+            }
+
+            if (testMode == TestMode.UNIT_TEST) {
+                if (details.language() != Language.CPP) {
+                    throw new IllegalArgumentException("Unit test mode is only supported for C++");
+                }
+                if (details.testFileContent() == null || details.testFileContent().isBlank()) {
+                    throw new IllegalArgumentException("Test file content is required for unit test mode");
+                }
+            }
+
             ProgrammingTask programmingTask = ProgrammingTask.builder()
                     .language(details.language())
-                    .gitlabProjectTemplate(details.gitlabProjectTemplate())
+                    .testMode(testMode)
                     .ciConfigTemplate(details.ciConfigTemplate())
+                    .functionSignature(details.functionSignature())
+                    .testFileContent(details.testFileContent())
                     .build();
             programmingTask.setAssignment(assignment);
+
+            if (testMode == TestMode.IO && details.testCases() != null) {
+                details.testCases().forEach(tc -> {
+                    TestCase testCase = TestCase.builder()
+                            .programmingTask(programmingTask)
+                            .name(tc.name())
+                            .testType(tc.testType())
+                            .input(tc.input())
+                            .expectedOutput(tc.expectedOutput())
+                            .build();
+                    programmingTask.getTestCases().add(testCase);
+                });
+            }
+
             assignment.setProgrammingTask(programmingTask);
         }
 
@@ -121,8 +155,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     /**
-     * Updates mutable fields of an existing assignment.
-     * Task details (programmingTask, fileUploadTask) are not updatable via this endpoint.
+     * Updates an existing assignment including its programming task details.
      *
      * @param id      the assignment ID
      * @param request the update payload
@@ -141,6 +174,45 @@ public class AssignmentServiceImpl implements AssignmentService {
                 request.maxScore(),
                 toOffsetDateTime(request.deadline())
         );
+
+        if (request.programmingTask() != null && assignment.getProgrammingTask() != null) {
+            ProgrammingTaskDetails details = request.programmingTask();
+            ProgrammingTask programmingTask = assignment.getProgrammingTask();
+            TestMode testMode = details.testMode() != null ? details.testMode() : programmingTask.getTestMode();
+
+            if (details.functionSignature() == null || details.functionSignature().isBlank()) {
+                throw new IllegalArgumentException("Function signature is required for programming tasks");
+            }
+
+            if (testMode == TestMode.UNIT_TEST) {
+                if (details.language() != Language.CPP) {
+                    throw new IllegalArgumentException("Unit test mode is only supported for C++");
+                }
+                if (details.testFileContent() == null || details.testFileContent().isBlank()) {
+                    throw new IllegalArgumentException("Test file content is required for unit test mode");
+                }
+            }
+
+            programmingTask.update(testMode, details.functionSignature(),
+                    details.testFileContent(), details.ciConfigTemplate());
+
+            // Replace test cases for IO mode
+            if (testMode == TestMode.IO && details.testCases() != null) {
+                List<TestCase> newTestCases = details.testCases().stream()
+                        .map(tc -> TestCase.builder()
+                                .programmingTask(programmingTask)
+                                .name(tc.name())
+                                .testType(tc.testType())
+                                .input(tc.input())
+                                .expectedOutput(tc.expectedOutput())
+                                .build())
+                        .toList();
+                programmingTask.replaceTestCases(newTestCases);
+            } else if (testMode == TestMode.UNIT_TEST) {
+                programmingTask.replaceTestCases(List.of());
+            }
+        }
+
         return AssignmentResponse.from(assignment);
     }
 

@@ -144,7 +144,7 @@ class AssignmentServiceTest {
         Course course = buildCourse(1L);
         Teacher teacher = buildTeacher(1L, 10L);
         Assignment assignment = buildAssignment(5L, course, teacher);
-        UpdateAssignmentRequest request = new UpdateAssignmentRequest("Updated HW", null, 80, null);
+        UpdateAssignmentRequest request = new UpdateAssignmentRequest("Updated HW", null, 80, null, null);
         when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
 
         AssignmentResponse result = assignmentService.updateAssignment(5L, request);
@@ -155,7 +155,7 @@ class AssignmentServiceTest {
 
     @Test
     void updateAssignment_throwsResourceNotFoundException_whenNotFound() {
-        UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null);
+        UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, null);
         when(assignmentRepository.findByIdAndIsActiveTrue(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> assignmentService.updateAssignment(99L, request))

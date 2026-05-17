@@ -11,12 +11,17 @@ import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.course.entity.Assignment;
 import ua.kpi.grader.course.entity.Course;
 import ua.kpi.grader.course.repository.AssignmentRepository;
+import ua.kpi.grader.gitlab.client.GitLabApiClient;
+import ua.kpi.grader.gitlab.service.GitLabSubmissionService;
 import ua.kpi.grader.security.CurrentUser;
+import ua.kpi.grader.submission.dto.AttemptResponse;
 import ua.kpi.grader.submission.dto.CreateSubmissionRequest;
 import ua.kpi.grader.submission.dto.SubmissionResponse;
 import ua.kpi.grader.submission.dto.SubmissionStatusResponse;
+import ua.kpi.grader.submission.entity.Attempt;
 import ua.kpi.grader.submission.entity.Submission;
 import ua.kpi.grader.submission.entity.SubmissionStatus;
+import ua.kpi.grader.submission.repository.AttemptRepository;
 import ua.kpi.grader.submission.repository.SubmissionRepository;
 import ua.kpi.grader.user.entity.Role;
 import ua.kpi.grader.user.entity.Student;
@@ -30,14 +35,17 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class SubmissionServiceTest {
 
     @Mock
     private SubmissionRepository submissionRepository;
+
+    @Mock
+    private AttemptRepository attemptRepository;
 
     @Mock
     private AssignmentRepository assignmentRepository;
@@ -48,30 +56,67 @@ class SubmissionServiceTest {
     @Mock
     private CurrentUser currentUser;
 
+    @Mock
+    private GitLabSubmissionService gitLabSubmissionService;
+
+    @Mock
+    private GitLabApiClient gitLabApiClient;
+
     @InjectMocks
     private SubmissionServiceImpl submissionService;
 
     private static final String STUDENT_EMAIL = "student@test.com";
 
-    // --- createSubmission ---
+    // --- createSubmission (first attempt, new submission) ---
 
     @Test
-    void createSubmission_happyPath_returnsNewSubmission() {
+    void createSubmission_firstAttempt_createsSubmissionAndAttempt() {
         Assignment assignment = buildAssignment(1L);
         Student student = buildStudent(1L, STUDENT_EMAIL);
         when(currentUser.getEmail()).thenReturn(STUDENT_EMAIL);
         when(assignmentRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(assignment));
         when(studentRepository.findByUser_Email(STUDENT_EMAIL)).thenReturn(Optional.of(student));
-        Submission saved = buildSubmission(1L, assignment, student);
-        when(submissionRepository.save(any(Submission.class))).thenReturn(saved);
+        when(submissionRepository.findByAssignmentIdAndStudentId(1L, 1L)).thenReturn(Optional.empty());
 
-        SubmissionResponse response = submissionService.createSubmission(1L,
+        Submission savedSubmission = buildSubmission(1L, assignment, student);
+        when(submissionRepository.save(any(Submission.class))).thenReturn(savedSubmission);
+        when(attemptRepository.findMaxAttemptNumber(1L)).thenReturn(0);
+
+        Attempt savedAttempt = buildAttempt(1L, savedSubmission, 1, "public class Main {}");
+        when(attemptRepository.save(any(Attempt.class))).thenReturn(savedAttempt);
+
+        AttemptResponse response = submissionService.createSubmission(1L,
                 new CreateSubmissionRequest("public class Main {}"));
 
         assertThat(response.id()).isEqualTo(1L);
+        assertThat(response.attemptNumber()).isEqualTo(1);
         assertThat(response.status()).isEqualTo(SubmissionStatus.PENDING);
-        assertThat(response.studentEmail()).isEqualTo(STUDENT_EMAIL);
         verify(submissionRepository).save(any(Submission.class));
+        verify(attemptRepository).save(any(Attempt.class));
+        verify(gitLabSubmissionService).triggerPipeline(eq(savedSubmission), eq(savedAttempt));
+    }
+
+    @Test
+    void createSubmission_secondAttempt_reusesExistingSubmission() {
+        Assignment assignment = buildAssignment(1L);
+        Student student = buildStudent(1L, STUDENT_EMAIL);
+        Submission existingSubmission = buildSubmission(1L, assignment, student);
+        when(currentUser.getEmail()).thenReturn(STUDENT_EMAIL);
+        when(assignmentRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(assignment));
+        when(studentRepository.findByUser_Email(STUDENT_EMAIL)).thenReturn(Optional.of(student));
+        when(submissionRepository.findByAssignmentIdAndStudentId(1L, 1L))
+                .thenReturn(Optional.of(existingSubmission));
+        when(attemptRepository.findMaxAttemptNumber(1L)).thenReturn(1);
+
+        Attempt savedAttempt = buildAttempt(2L, existingSubmission, 2, "updated code");
+        when(attemptRepository.save(any(Attempt.class))).thenReturn(savedAttempt);
+
+        AttemptResponse response = submissionService.createSubmission(1L,
+                new CreateSubmissionRequest("updated code"));
+
+        assertThat(response.attemptNumber()).isEqualTo(2);
+        verify(submissionRepository, never()).save(any(Submission.class));
+        verify(gitLabSubmissionService).triggerPipeline(eq(existingSubmission), eq(savedAttempt));
     }
 
     @Test
@@ -165,7 +210,7 @@ class SubmissionServiceTest {
         when(assignmentRepository.existsById(1L)).thenReturn(true);
         Student student = buildStudent(1L, STUDENT_EMAIL);
         Assignment assignment = buildAssignment(1L);
-        when(submissionRepository.findAllByAssignmentIdOrderBySubmittedAtDesc(1L))
+        when(submissionRepository.findAllByAssignmentIdOrderByUpdatedAtDesc(1L))
                 .thenReturn(List.of(buildSubmission(1L, assignment, student)));
 
         List<SubmissionResponse> result = submissionService.listByAssignment(1L);
@@ -183,43 +228,43 @@ class SubmissionServiceTest {
                 .hasMessageContaining("99");
     }
 
-    // --- getMyLatestSubmission ---
+    // --- getMySubmission ---
 
     @Test
-    void getMyLatestSubmission_hasSubmission_returnsLatest() {
+    void getMySubmission_hasSubmission_returnsIt() {
         Student student = buildStudent(1L, STUDENT_EMAIL);
         Assignment assignment = buildAssignment(1L);
         when(currentUser.getEmail()).thenReturn(STUDENT_EMAIL);
         when(assignmentRepository.existsById(1L)).thenReturn(true);
         when(studentRepository.findByUser_Email(STUDENT_EMAIL)).thenReturn(Optional.of(student));
-        when(submissionRepository.findAllByAssignmentIdAndStudentIdOrderBySubmittedAtDesc(1L, 1L))
-                .thenReturn(List.of(buildSubmission(1L, assignment, student)));
+        when(submissionRepository.findByAssignmentIdAndStudentId(1L, 1L))
+                .thenReturn(Optional.of(buildSubmission(1L, assignment, student)));
 
-        Optional<SubmissionResponse> result = submissionService.getMyLatestSubmission(1L);
+        Optional<SubmissionResponse> result = submissionService.getMySubmission(1L);
 
         assertThat(result).isPresent();
         assertThat(result.get().studentEmail()).isEqualTo(STUDENT_EMAIL);
     }
 
     @Test
-    void getMyLatestSubmission_noSubmissions_returnsEmpty() {
+    void getMySubmission_noSubmission_returnsEmpty() {
         Student student = buildStudent(1L, STUDENT_EMAIL);
         when(currentUser.getEmail()).thenReturn(STUDENT_EMAIL);
         when(assignmentRepository.existsById(1L)).thenReturn(true);
         when(studentRepository.findByUser_Email(STUDENT_EMAIL)).thenReturn(Optional.of(student));
-        when(submissionRepository.findAllByAssignmentIdAndStudentIdOrderBySubmittedAtDesc(1L, 1L))
-                .thenReturn(List.of());
+        when(submissionRepository.findByAssignmentIdAndStudentId(1L, 1L))
+                .thenReturn(Optional.empty());
 
-        Optional<SubmissionResponse> result = submissionService.getMyLatestSubmission(1L);
+        Optional<SubmissionResponse> result = submissionService.getMySubmission(1L);
 
         assertThat(result).isEmpty();
     }
 
     @Test
-    void getMyLatestSubmission_assignmentNotFound_throwsResourceNotFoundException() {
+    void getMySubmission_assignmentNotFound_throwsResourceNotFoundException() {
         when(assignmentRepository.existsById(99L)).thenReturn(false);
 
-        assertThatThrownBy(() -> submissionService.getMyLatestSubmission(99L))
+        assertThatThrownBy(() -> submissionService.getMySubmission(99L))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("99");
     }
@@ -278,9 +323,18 @@ class SubmissionServiceTest {
         Submission submission = Submission.builder()
                 .assignment(assignment)
                 .student(student)
-                .codeContent("public class Main {}")
                 .build();
         ReflectionTestUtils.setField(submission, "id", id);
         return submission;
+    }
+
+    private Attempt buildAttempt(Long id, Submission submission, int attemptNumber, String code) {
+        Attempt attempt = Attempt.builder()
+                .submission(submission)
+                .attemptNumber(attemptNumber)
+                .codeContent(code)
+                .build();
+        ReflectionTestUtils.setField(attempt, "id", id);
+        return attempt;
     }
 }

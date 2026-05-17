@@ -8,9 +8,14 @@ import ua.kpi.grader.course.entity.Assignment;
 import ua.kpi.grader.user.entity.Student;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
-@Table(name = "submissions")
+@Table(name = "submissions",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_submissions_assignment_student",
+                columnNames = {"assignment_id", "student_id"}))
 @Getter
 @Builder
 @NoArgsConstructor
@@ -36,21 +41,23 @@ public class Submission {
     @Builder.Default
     private SubmissionStatus status = SubmissionStatus.PENDING;
 
-    @Column(name = "code_content", columnDefinition = "TEXT")
-    private String codeContent;
-
     @Column
     private Integer score;
 
-    @Column(name = "gitlab_pipeline_id")
-    private Long gitlabPipelineId;
+    @Column(name = "best_score")
+    private Integer bestScore;
 
-    @Column(name = "pipeline_output", columnDefinition = "TEXT")
-    private String pipelineOutput;
+    @Column(name = "gitlab_project_id")
+    private Long gitlabProjectId;
 
-    @Column(name = "submitted_at", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "latest_attempt_id",
+            foreignKey = @ForeignKey(name = "fk_submissions_latest_attempt"))
+    private Attempt latestAttempt;
+
+    @OneToMany(mappedBy = "submission", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
-    private OffsetDateTime submittedAt = OffsetDateTime.now();
+    private List<Attempt> attempts = new ArrayList<>();
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -61,19 +68,29 @@ public class Submission {
     private OffsetDateTime updatedAt;
 
     /**
-     * Marks the submission as RUNNING and records the GitLab pipeline ID.
+     * Records the GitLab project ID after the first attempt creates the project.
      */
-    public void startPipeline(Long pipelineId) {
-        this.gitlabPipelineId = pipelineId;
-        this.status = SubmissionStatus.RUNNING;
+    public void assignGitlabProject(Long projectId) {
+        this.gitlabProjectId = projectId;
     }
 
     /**
-     * Applies the pipeline result: status, score, and raw output.
+     * Propagates attempt results to the submission aggregate.
+     * Always updates bestScore. Only updates status/score/latestAttempt
+     * if this attempt is the most recent one (highest attempt number).
      */
-    public void applyResult(SubmissionStatus newStatus, Integer newScore, String output) {
-        this.status = newStatus;
-        this.score = newScore;
-        this.pipelineOutput = output;
+    public void updateFromAttempt(Attempt attempt) {
+        if (attempt.getScore() != null) {
+            this.bestScore = (this.bestScore == null)
+                    ? attempt.getScore()
+                    : Math.max(this.bestScore, attempt.getScore());
+        }
+
+        if (this.latestAttempt == null
+                || attempt.getAttemptNumber() >= this.latestAttempt.getAttemptNumber()) {
+            this.status = attempt.getStatus();
+            this.score = attempt.getScore();
+            this.latestAttempt = attempt;
+        }
     }
 }

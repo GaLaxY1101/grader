@@ -2,7 +2,6 @@ package ua.kpi.grader.course.dto;
 
 import ua.kpi.grader.course.entity.Course;
 
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 public record CourseResponse(
@@ -11,8 +10,6 @@ public record CourseResponse(
         String description,
         Integer academicYear,
         Integer semester,
-        LocalDate startDate,
-        LocalDate endDate,
         boolean isActive,
         OffsetDateTime createdAt
 ) {
@@ -23,8 +20,6 @@ public record CourseResponse(
                 course.getDescription(),
                 course.getAcademicYear(),
                 course.getSemester(),
-                course.getStartDate(),
-                course.getEndDate(),
                 course.isActive(),
                 course.getCreatedAt()
         );

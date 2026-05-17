@@ -1,8 +1,6 @@
 package ua.kpi.grader.submission.service;
 
-import ua.kpi.grader.submission.dto.CreateSubmissionRequest;
-import ua.kpi.grader.submission.dto.SubmissionResponse;
-import ua.kpi.grader.submission.dto.SubmissionStatusResponse;
+import ua.kpi.grader.submission.dto.*;
 
 import java.util.List;
 import java.util.Optional;
@@ -10,13 +8,14 @@ import java.util.Optional;
 public interface SubmissionService {
 
     /**
-     * Creates a new submission for the given assignment on behalf of the authenticated student.
+     * Creates a new attempt for the given assignment on behalf of the authenticated student.
+     * If no submission exists yet for this student-assignment pair, one is created first.
      *
      * @param assignmentId the assignment ID
-     * @param request      the submission payload
-     * @return the persisted SubmissionResponse DTO
+     * @param request      the submission payload containing the student's code
+     * @return the persisted AttemptResponse DTO
      */
-    SubmissionResponse createSubmission(Long assignmentId, CreateSubmissionRequest request);
+    AttemptResponse createSubmission(Long assignmentId, CreateSubmissionRequest request);
 
     /**
      * Returns the full submission by ID.
@@ -28,7 +27,7 @@ public interface SubmissionService {
     SubmissionResponse findById(Long id);
 
     /**
-     * Returns a lightweight status snapshot for polling.
+     * Returns a lightweight status snapshot for polling a submission.
      * Students may only poll their own submissions; teachers/admins may poll any.
      *
      * @param id the submission ID
@@ -46,11 +45,39 @@ public interface SubmissionService {
     List<SubmissionResponse> listByAssignment(Long assignmentId);
 
     /**
-     * Returns the authenticated student's latest submission for the given assignment,
+     * Returns the authenticated student's submission for the given assignment,
      * or empty if the student has not submitted yet.
      *
      * @param assignmentId the assignment ID
      * @return optional SubmissionResponse DTO
      */
-    Optional<SubmissionResponse> getMyLatestSubmission(Long assignmentId);
+    Optional<SubmissionResponse> getMySubmission(Long assignmentId);
+
+    /**
+     * Returns all attempts for a submission, newest first.
+     * Students may only access their own; teachers/admins may access any.
+     *
+     * @param submissionId the submission ID
+     * @return list of AttemptResponse DTOs
+     */
+    List<AttemptResponse> listAttempts(Long submissionId);
+
+    /**
+     * Returns a lightweight status snapshot for polling a specific attempt.
+     * Students may only poll their own attempts; teachers/admins may poll any.
+     *
+     * @param attemptId the attempt ID
+     * @return the AttemptStatusResponse DTO
+     */
+    AttemptStatusResponse getAttemptStatus(Long attemptId);
+
+    /**
+     * Applies the GitLab pipeline result to the matching attempt and its parent submission.
+     * Called by the webhook endpoint when GitLab reports a pipeline completion.
+     *
+     * @param gitlabProjectId  the GitLab project id from the webhook payload
+     * @param gitlabPipelineId the GitLab pipeline id from the webhook payload
+     * @param gitlabStatus     the pipeline status string from GitLab (e.g. "success", "failed")
+     */
+    void applyGitLabResult(Long gitlabProjectId, Long gitlabPipelineId, String gitlabStatus);
 }

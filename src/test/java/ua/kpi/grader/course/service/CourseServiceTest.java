@@ -103,7 +103,7 @@ class CourseServiceTest {
     @Test
     void createCourse_persistsAndReturnsCourse() {
         Teacher teacher = buildTeacher(1L, 10L);
-        CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1, null, null);
+        CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1);
         Course saved = buildCourse(5L, "CS101");
         when(currentUser.getEmail()).thenReturn("teacher10@test.com");
         when(teacherRepository.findByUser_Email("teacher10@test.com")).thenReturn(Optional.of(teacher));
@@ -117,7 +117,7 @@ class CourseServiceTest {
 
     @Test
     void createCourse_throwsResourceNotFoundException_whenTeacherNotFound() {
-        CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1, null, null);
+        CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1);
         when(currentUser.getEmail()).thenReturn("nobody@test.com");
         when(teacherRepository.findByUser_Email("nobody@test.com")).thenReturn(Optional.empty());
 
@@ -131,7 +131,7 @@ class CourseServiceTest {
     @Test
     void updateCourse_updatesFields_whenExists() {
         Course course = buildCourse(1L, "Old Name");
-        UpdateCourseRequest request = new UpdateCourseRequest("New Name", "desc", 2024, 2, null, null);
+        UpdateCourseRequest request = new UpdateCourseRequest("New Name", "desc", 2024, 2);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
 
         CourseResponse result = courseService.updateCourse(1L, request);
@@ -141,7 +141,7 @@ class CourseServiceTest {
 
     @Test
     void updateCourse_throwsResourceNotFoundException_whenNotFound() {
-        UpdateCourseRequest request = new UpdateCourseRequest("Name", null, 2024, 1, null, null);
+        UpdateCourseRequest request = new UpdateCourseRequest("Name", null, 2024, 1);
         when(courseRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> courseService.updateCourse(99L, request))

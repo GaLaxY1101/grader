@@ -6,7 +6,6 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import ua.kpi.grader.user.entity.Teacher;
 
-import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 @Entity
@@ -41,12 +40,6 @@ public class Course {
     @Column(nullable = false)
     private Integer semester;
 
-    @Column(name = "start_date")
-    private LocalDate startDate;
-
-    @Column(name = "end_date")
-    private LocalDate endDate;
-
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private boolean isActive = true;
@@ -62,14 +55,11 @@ public class Course {
     /**
      * Updates mutable fields on this course.
      */
-    public void update(String name, String description, Integer academicYear, Integer semester,
-                       LocalDate startDate, LocalDate endDate) {
+    public void update(String name, String description, Integer academicYear, Integer semester) {
         this.name = name;
         this.academicYear = academicYear;
         this.semester = semester;
         if (description != null) this.description = description;
-        if (startDate != null) this.startDate = startDate;
-        if (endDate != null) this.endDate = endDate;
     }
 
     /**

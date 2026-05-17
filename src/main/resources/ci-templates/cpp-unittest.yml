@@ -1,0 +1,10 @@
+image: gcc:latest
+
+stages:
+  - test
+
+test:
+  stage: test
+  script:
+    - g++ -o test_runner test.cpp -std=c++17
+    - ./test_runner

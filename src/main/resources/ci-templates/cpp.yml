@@ -1,0 +1,13 @@
+image: gcc:latest
+
+stages:
+  - compile
+  - test
+
+compile:
+  stage: compile
+  script:
+    - gcc -o solution solution.c || g++ -o solution solution.cpp
+  artifacts:
+    paths:
+      - solution

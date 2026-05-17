@@ -76,3 +76,4 @@ gitlab:
   group-name: ${GITLAB_GROUP_NAME:grader}
   webhook-secret: ${GITLAB_WEBHOOK_SECRET:webhook-secret-change-me}
   runner-token: ${GITLAB_RUNNER_TOKEN:}
+  webhook-base-url: ${GITLAB_WEBHOOK_BASE_URL:http://host.docker.internal:8080}

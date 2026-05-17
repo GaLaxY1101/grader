@@ -124,8 +124,12 @@ Tables created so far:
 - [x] `CiConfigService`: generates .gitlab-ci.yml for C/C++ (custom template override supported)
 - [x] `GitLabInitializer`: auto-creates 'grader' group on startup — verified, group id=2
 - [x] Local secrets via `application-local.properties` (gitignored), `spring-dotenv` removed
-- [ ] Push code + .gitlab-ci.yml on submission (Part B)
-- [ ] Webhook endpoint: POST /api/webhooks/gitlab → update status + score (Part B)
+- [x] V10 migration: `gitlab_project_id` added to submissions + indexes
+- [x] `GitLabSubmissionService`: creates project, pushes solution + .gitlab-ci.yml, registers webhook, records pipeline id
+- [x] `SubmissionServiceImpl.createSubmission()`: calls `triggerPipeline()` after save
+- [x] `SubmissionServiceImpl.applyGitLabResult()`: maps status, fetches job logs, scores submission
+- [x] `WebhookController` POST `/api/webhooks/gitlab`: verifies X-Gitlab-Token, ignores non-terminal statuses
+- [x] `/api/webhooks/**` added to SecurityConfig permitAll
 
 ### Session 8 — React frontend ✅ (in progress, see grader-frontend/PROGRESS.md)
 - [x] Auth (Keycloak login/logout), protected layout, Sidebar/Topbar

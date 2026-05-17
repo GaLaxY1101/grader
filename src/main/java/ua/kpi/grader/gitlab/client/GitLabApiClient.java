@@ -31,6 +31,22 @@ public class GitLabApiClient {
                 .build();
     }
 
+    // ── Admin settings ────────────────────────────────────────
+
+    /**
+     * Enables local network access for webhooks in GitLab application settings.
+     * Required so GitLab can POST pipeline events to host.docker.internal (Spring Boot).
+     * Idempotent — safe to call on every startup.
+     */
+    public void allowLocalWebhooks() {
+        log.info("Enabling local network webhook access in GitLab settings");
+        restClient.put()
+                .uri("/application/settings")
+                .body(Map.of("allow_local_requests_from_web_hooks_and_services", true))
+                .retrieve()
+                .toBodilessEntity();
+    }
+
     // ── Groups ────────────────────────────────────────────────
 
     /**
@@ -73,8 +89,9 @@ public class GitLabApiClient {
     // ── Projects ──────────────────────────────────────────────
 
     /**
-     * Create a new private GitLab project for a student/assignment pair.
+     * Create a new private GitLab project for a student-assignment pair.
      * Project name and path follow the pattern: assignment-{assignmentId}-student-{studentId}.
+     * The project is reused across attempts.
      *
      * @param assignmentId the assignment id
      * @param studentId    the student id
@@ -130,6 +147,31 @@ public class GitLabApiClient {
                 .toBodilessEntity();
     }
 
+    /**
+     * Update an existing file in a GitLab project repository via the Files API (PUT).
+     * Used for subsequent attempts where the file already exists from the first push.
+     *
+     * @param projectId     the GitLab project id
+     * @param filePath      relative path inside the repo (e.g. "solution.c")
+     * @param content       raw file content
+     * @param commitMessage commit message
+     */
+    public void updateFile(Integer projectId, String filePath, String content, String commitMessage) {
+        String encodedPath = UriUtils.encodePathSegment(filePath, StandardCharsets.UTF_8);
+        log.debug("Updating file '{}' in project id={}", filePath, projectId);
+
+        Map<String, Object> body = Map.of(
+                "branch", "main",
+                "content", content,
+                "commit_message", commitMessage
+        );
+        restClient.put()
+                .uri("/projects/{projectId}/repository/files/{filePath}", projectId, encodedPath)
+                .body(body)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
     // ── Webhooks ──────────────────────────────────────────────
 
     /**
@@ -157,6 +199,38 @@ public class GitLabApiClient {
     }
 
     // ── Pipelines ─────────────────────────────────────────────
+
+    /**
+     * Fetch the most recently created pipeline for a project.
+     * Retries up to 5 times with 1-second pauses — GitLab may take a moment
+     * to queue the pipeline after the .gitlab-ci.yml push.
+     *
+     * @param projectId the GitLab project id
+     * @return the latest pipeline DTO
+     * @throws IllegalStateException if no pipeline appears after all attempts
+     */
+    public GitLabPipelineDto getLatestPipeline(Integer projectId) {
+        for (int attempt = 1; attempt <= 5; attempt++) {
+            log.debug("Fetching latest pipeline for project id={} (attempt {}/5)", projectId, attempt);
+            List<GitLabPipelineDto> pipelines = restClient.get()
+                    .uri("/projects/{projectId}/pipelines?per_page=1&order_by=id&sort=desc", projectId)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {});
+            if (pipelines != null && !pipelines.isEmpty()) {
+                return pipelines.getFirst();
+            }
+            if (attempt < 5) {
+                log.debug("No pipeline yet for project id={}, waiting 1s before retry", projectId);
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while waiting for pipeline on project " + projectId);
+                }
+            }
+        }
+        throw new IllegalStateException("No pipeline found for project " + projectId + " after 5 attempts");
+    }
 
     /**
      * Fetch pipeline details including current status from GitLab.

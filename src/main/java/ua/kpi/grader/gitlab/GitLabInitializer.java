@@ -30,6 +30,7 @@ public class GitLabInitializer implements ApplicationRunner {
 
         log.info("Running GitLab initialization...");
         try {
+            gitLabApiClient.allowLocalWebhooks();
             Integer groupId = gitLabApiClient.getOrCreateGroup();
             log.info("GitLab ready — group '{}' id={}", gitLabProperties.groupName(), groupId);
         } catch (Exception e) {

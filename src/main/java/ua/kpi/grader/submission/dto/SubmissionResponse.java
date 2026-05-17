@@ -12,10 +12,9 @@ public record SubmissionResponse(
         String studentEmail,
         SubmissionStatus status,
         Integer score,
-        String codeContent,
-        Long gitlabPipelineId,
-        String pipelineOutput,
-        OffsetDateTime submittedAt,
+        Integer bestScore,
+        int attemptCount,
+        Long latestAttemptId,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {
@@ -27,10 +26,11 @@ public record SubmissionResponse(
                 submission.getStudent().getUser().getEmail(),
                 submission.getStatus(),
                 submission.getScore(),
-                submission.getCodeContent(),
-                submission.getGitlabPipelineId(),
-                submission.getPipelineOutput(),
-                submission.getSubmittedAt(),
+                submission.getBestScore(),
+                submission.getAttempts().size(),
+                submission.getLatestAttempt() != null
+                        ? submission.getLatestAttempt().getId()
+                        : null,
                 submission.getCreatedAt(),
                 submission.getUpdatedAt()
         );

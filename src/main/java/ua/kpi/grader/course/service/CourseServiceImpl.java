@@ -98,8 +98,6 @@ public class CourseServiceImpl implements CourseService {
                 .description(request.description())
                 .academicYear(request.academicYear())
                 .semester(request.semester())
-                .startDate(request.startDate())
-                .endDate(request.endDate())
                 .createdBy(teacher)
                 .build();
 
@@ -118,8 +116,7 @@ public class CourseServiceImpl implements CourseService {
     @Transactional
     public CourseResponse updateCourse(Long id, UpdateCourseRequest request) {
         Course course = findCourseOrThrow(id);
-        course.update(request.name(), request.description(), request.academicYear(),
-                request.semester(), request.startDate(), request.endDate());
+        course.update(request.name(), request.description(), request.academicYear(), request.semester());
         return CourseResponse.from(course);
     }
 

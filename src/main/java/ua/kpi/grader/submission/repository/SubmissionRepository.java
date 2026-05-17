@@ -10,14 +10,33 @@ import java.util.Optional;
 
 public interface SubmissionRepository extends JpaRepository<Submission, Long> {
 
-    @Query("SELECT s FROM Submission s JOIN FETCH s.student st JOIN FETCH st.user JOIN FETCH s.assignment WHERE s.id = :id")
+    @Query("""
+            SELECT s FROM Submission s
+            JOIN FETCH s.student st
+            JOIN FETCH st.user
+            JOIN FETCH s.assignment
+            WHERE s.id = :id
+            """)
     Optional<Submission> findByIdWithDetails(@Param("id") Long id);
 
-    @Query("SELECT s FROM Submission s JOIN FETCH s.student st JOIN FETCH st.user JOIN FETCH s.assignment WHERE s.assignment.id = :assignmentId ORDER BY s.submittedAt DESC")
-    List<Submission> findAllByAssignmentIdOrderBySubmittedAtDesc(@Param("assignmentId") Long assignmentId);
+    @Query("""
+            SELECT s FROM Submission s
+            JOIN FETCH s.student st
+            JOIN FETCH st.user
+            JOIN FETCH s.assignment
+            WHERE s.assignment.id = :assignmentId
+            ORDER BY s.updatedAt DESC
+            """)
+    List<Submission> findAllByAssignmentIdOrderByUpdatedAtDesc(@Param("assignmentId") Long assignmentId);
 
-    @Query("SELECT s FROM Submission s JOIN FETCH s.student st JOIN FETCH st.user JOIN FETCH s.assignment WHERE s.assignment.id = :assignmentId AND s.student.id = :studentId ORDER BY s.submittedAt DESC")
-    List<Submission> findAllByAssignmentIdAndStudentIdOrderBySubmittedAtDesc(
+    @Query("""
+            SELECT s FROM Submission s
+            JOIN FETCH s.student st
+            JOIN FETCH st.user
+            JOIN FETCH s.assignment
+            WHERE s.assignment.id = :assignmentId AND s.student.id = :studentId
+            """)
+    Optional<Submission> findByAssignmentIdAndStudentId(
             @Param("assignmentId") Long assignmentId,
             @Param("studentId") Long studentId);
 }
