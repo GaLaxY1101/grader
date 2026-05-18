@@ -27,9 +27,6 @@ public class AcademicGroup {
     @Column(nullable = false, unique = true, length = 50)
     private String code;
 
-    @Column(nullable = false, length = 100)
-    private String name;
-
     @Column(length = 100)
     private String faculty;
 
@@ -54,10 +51,8 @@ public class AcademicGroup {
     /**
      * Updates mutable fields on this group.
      */
-    public void update(String code, String name, String faculty,
-                       String speciality, Integer yearOfCreation) {
+    public void update(String code, String faculty, String speciality, Integer yearOfCreation) {
         this.code = code;
-        this.name = name;
         this.faculty = faculty;
         this.speciality = speciality;
         this.yearOfCreation = yearOfCreation;

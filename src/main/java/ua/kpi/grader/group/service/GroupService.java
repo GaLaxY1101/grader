@@ -63,7 +63,6 @@ public class GroupService {
         }
         AcademicGroup group = AcademicGroup.builder()
                 .code(request.code())
-                .name(request.name())
                 .faculty(request.faculty())
                 .speciality(request.speciality())
                 .yearOfCreation(request.yearOfCreation())
@@ -86,8 +85,7 @@ public class GroupService {
         if (groupRepository.existsByCodeAndIdNot(request.code(), id)) {
             throw new IllegalStateException("Group with code '" + request.code() + "' already exists");
         }
-        group.update(request.code(), request.name(), request.faculty(),
-                request.speciality(), request.yearOfCreation());
+        group.update(request.code(), request.faculty(), request.speciality(), request.yearOfCreation());
         return GroupResponse.from(group);
     }
 

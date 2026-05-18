@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Size;
 
 public record UpdateGroupRequest(
         @NotBlank @Size(max = 50) String code,
-        @NotBlank @Size(max = 100) String name,
         @Size(max = 100) String faculty,
         @Size(max = 100) String speciality,
         @NotNull Integer yearOfCreation

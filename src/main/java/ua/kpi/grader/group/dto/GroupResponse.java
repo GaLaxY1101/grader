@@ -7,7 +7,6 @@ import java.time.OffsetDateTime;
 public record GroupResponse(
         Long id,
         String code,
-        String name,
         String faculty,
         String speciality,
         Integer yearOfCreation,
@@ -18,7 +17,6 @@ public record GroupResponse(
         return new GroupResponse(
                 group.getId(),
                 group.getCode(),
-                group.getName(),
                 group.getFaculty(),
                 group.getSpeciality(),
                 group.getYearOfCreation(),
