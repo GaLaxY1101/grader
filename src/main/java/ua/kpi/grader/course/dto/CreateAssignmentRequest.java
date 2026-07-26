@@ -10,7 +10,6 @@ public record CreateAssignmentRequest(
         String description,
         Integer maxScore,
         LocalDateTime deadline,
-        @Valid ProgrammingTaskDetails programmingTask,
-        @Valid FileUploadTaskDetails fileUploadTask
+        @Valid ProgrammingTaskDetails programmingTask
 ) {
 }

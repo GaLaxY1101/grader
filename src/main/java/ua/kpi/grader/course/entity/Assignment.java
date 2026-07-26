@@ -48,12 +48,8 @@ public class Assignment {
     private Teacher createdBy;
 
     @Setter
-    @OneToOne(mappedBy = "assignment", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @OneToOne(mappedBy = "assignment", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private ProgrammingTask programmingTask;
-
-    @Setter
-    @OneToOne(mappedBy = "assignment", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    private FileUploadTask fileUploadTask;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

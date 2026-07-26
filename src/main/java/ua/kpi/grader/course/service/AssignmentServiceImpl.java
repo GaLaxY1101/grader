@@ -6,12 +6,10 @@ import org.springframework.transaction.annotation.Transactional;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.course.dto.AssignmentResponse;
 import ua.kpi.grader.course.dto.CreateAssignmentRequest;
-import ua.kpi.grader.course.dto.FileUploadTaskDetails;
 import ua.kpi.grader.course.dto.ProgrammingTaskDetails;
 import ua.kpi.grader.course.dto.UpdateAssignmentRequest;
 import ua.kpi.grader.course.entity.Assignment;
 import ua.kpi.grader.course.entity.Course;
-import ua.kpi.grader.course.entity.FileUploadTask;
 import ua.kpi.grader.course.entity.Language;
 import ua.kpi.grader.course.entity.ProgrammingTask;
 import ua.kpi.grader.course.entity.TestCase;
@@ -69,7 +67,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     }
 
     /**
-     * Creates a new assignment and optional task details for a course in a single transaction.
+     * Creates a new assignment and optional programming task for a course in a single transaction.
      * The teacher is resolved from the Keycloak JWT email claim.
      *
      * @param courseId the course ID
@@ -99,63 +97,16 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .build();
 
         if (request.programmingTask() != null) {
-            ProgrammingTaskDetails details = request.programmingTask();
-            TestMode testMode = details.testMode() != null ? details.testMode() : TestMode.IO;
-
-            if (details.functionSignature() == null || details.functionSignature().isBlank()) {
-                throw new IllegalArgumentException("Function signature is required for programming tasks");
-            }
-
-            if (testMode == TestMode.UNIT_TEST) {
-                if (details.language() != Language.CPP) {
-                    throw new IllegalArgumentException("Unit test mode is only supported for C++");
-                }
-                if (details.testFileContent() == null || details.testFileContent().isBlank()) {
-                    throw new IllegalArgumentException("Test file content is required for unit test mode");
-                }
-            }
-
-            ProgrammingTask programmingTask = ProgrammingTask.builder()
-                    .language(details.language())
-                    .testMode(testMode)
-                    .ciConfigTemplate(details.ciConfigTemplate())
-                    .functionSignature(details.functionSignature())
-                    .testFileContent(details.testFileContent())
-                    .build();
-            programmingTask.setAssignment(assignment);
-
-            if (testMode == TestMode.IO && details.testCases() != null) {
-                details.testCases().forEach(tc -> {
-                    TestCase testCase = TestCase.builder()
-                            .programmingTask(programmingTask)
-                            .name(tc.name())
-                            .testType(tc.testType())
-                            .input(tc.input())
-                            .expectedOutput(tc.expectedOutput())
-                            .build();
-                    programmingTask.getTestCases().add(testCase);
-                });
-            }
-
-            assignment.setProgrammingTask(programmingTask);
-        }
-
-        if (request.fileUploadTask() != null) {
-            FileUploadTaskDetails details = request.fileUploadTask();
-            FileUploadTask fileUploadTask = FileUploadTask.builder()
-                    .allowedExtensions(details.allowedExtensions())
-                    .maxFileSize(details.maxFileSize())
-                    .allowedFileCount(details.allowedFileCount() != null ? details.allowedFileCount() : 1)
-                    .build();
-            fileUploadTask.setAssignment(assignment);
-            assignment.setFileUploadTask(fileUploadTask);
+            assignment.setProgrammingTask(buildProgrammingTask(assignment, request.programmingTask()));
         }
 
         return AssignmentResponse.from(assignmentRepository.save(assignment));
     }
 
     /**
-     * Updates an existing assignment including its programming task details.
+     * Updates an existing assignment. The code check (programming task) is toggled by the
+     * presence of {@code request.programmingTask()}: non-null creates or updates it, null
+     * removes any existing one via orphan removal.
      *
      * @param id      the assignment ID
      * @param request the update payload
@@ -175,42 +126,15 @@ public class AssignmentServiceImpl implements AssignmentService {
                 toOffsetDateTime(request.deadline())
         );
 
-        if (request.programmingTask() != null && assignment.getProgrammingTask() != null) {
-            ProgrammingTaskDetails details = request.programmingTask();
-            ProgrammingTask programmingTask = assignment.getProgrammingTask();
-            TestMode testMode = details.testMode() != null ? details.testMode() : programmingTask.getTestMode();
+        ProgrammingTaskDetails incoming = request.programmingTask();
+        ProgrammingTask existing = assignment.getProgrammingTask();
 
-            if (details.functionSignature() == null || details.functionSignature().isBlank()) {
-                throw new IllegalArgumentException("Function signature is required for programming tasks");
-            }
-
-            if (testMode == TestMode.UNIT_TEST) {
-                if (details.language() != Language.CPP) {
-                    throw new IllegalArgumentException("Unit test mode is only supported for C++");
-                }
-                if (details.testFileContent() == null || details.testFileContent().isBlank()) {
-                    throw new IllegalArgumentException("Test file content is required for unit test mode");
-                }
-            }
-
-            programmingTask.update(testMode, details.functionSignature(),
-                    details.testFileContent(), details.ciConfigTemplate());
-
-            // Replace test cases for IO mode
-            if (testMode == TestMode.IO && details.testCases() != null) {
-                List<TestCase> newTestCases = details.testCases().stream()
-                        .map(tc -> TestCase.builder()
-                                .programmingTask(programmingTask)
-                                .name(tc.name())
-                                .testType(tc.testType())
-                                .input(tc.input())
-                                .expectedOutput(tc.expectedOutput())
-                                .build())
-                        .toList();
-                programmingTask.replaceTestCases(newTestCases);
-            } else if (testMode == TestMode.UNIT_TEST) {
-                programmingTask.replaceTestCases(List.of());
-            }
+        if (incoming != null && existing == null) {
+            assignment.setProgrammingTask(buildProgrammingTask(assignment, incoming));
+        } else if (incoming != null) {
+            updateProgrammingTask(existing, incoming);
+        } else if (existing != null) {
+            assignment.setProgrammingTask(null);
         }
 
         return AssignmentResponse.from(assignment);
@@ -229,6 +153,72 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Assignment not found with id: " + id));
         assignment.deactivate();
+    }
+
+    private ProgrammingTask buildProgrammingTask(Assignment assignment, ProgrammingTaskDetails details) {
+        TestMode testMode = details.testMode() != null ? details.testMode() : TestMode.IO;
+        validateProgrammingTask(details, testMode);
+
+        ProgrammingTask programmingTask = ProgrammingTask.builder()
+                .language(details.language())
+                .testMode(testMode)
+                .ciConfigTemplate(details.ciConfigTemplate())
+                .functionSignature(details.functionSignature())
+                .testFileContent(details.testFileContent())
+                .build();
+        programmingTask.setAssignment(assignment);
+
+        if (testMode == TestMode.IO && details.testCases() != null) {
+            details.testCases().forEach(tc -> {
+                TestCase testCase = TestCase.builder()
+                        .programmingTask(programmingTask)
+                        .name(tc.name())
+                        .testType(tc.testType())
+                        .input(tc.input())
+                        .expectedOutput(tc.expectedOutput())
+                        .build();
+                programmingTask.getTestCases().add(testCase);
+            });
+        }
+
+        return programmingTask;
+    }
+
+    private void updateProgrammingTask(ProgrammingTask programmingTask, ProgrammingTaskDetails details) {
+        TestMode testMode = details.testMode() != null ? details.testMode() : programmingTask.getTestMode();
+        validateProgrammingTask(details, testMode);
+
+        programmingTask.update(testMode, details.functionSignature(),
+                details.testFileContent(), details.ciConfigTemplate());
+
+        if (testMode == TestMode.IO && details.testCases() != null) {
+            List<TestCase> newTestCases = details.testCases().stream()
+                    .map(tc -> TestCase.builder()
+                            .programmingTask(programmingTask)
+                            .name(tc.name())
+                            .testType(tc.testType())
+                            .input(tc.input())
+                            .expectedOutput(tc.expectedOutput())
+                            .build())
+                    .toList();
+            programmingTask.replaceTestCases(newTestCases);
+        } else if (testMode == TestMode.UNIT_TEST) {
+            programmingTask.replaceTestCases(List.of());
+        }
+    }
+
+    private void validateProgrammingTask(ProgrammingTaskDetails details, TestMode testMode) {
+        if (details.functionSignature() == null || details.functionSignature().isBlank()) {
+            throw new IllegalArgumentException("Function signature is required for programming tasks");
+        }
+        if (testMode == TestMode.UNIT_TEST) {
+            if (details.language() != Language.CPP) {
+                throw new IllegalArgumentException("Unit test mode is only supported for C++");
+            }
+            if (details.testFileContent() == null || details.testFileContent().isBlank()) {
+                throw new IllegalArgumentException("Test file content is required for unit test mode");
+            }
+        }
     }
 
     private Course findCourseOrThrow(Long courseId) {

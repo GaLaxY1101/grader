@@ -9,9 +9,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.course.dto.AssignmentResponse;
 import ua.kpi.grader.course.dto.CreateAssignmentRequest;
+import ua.kpi.grader.course.dto.ProgrammingTaskDetails;
 import ua.kpi.grader.course.dto.UpdateAssignmentRequest;
 import ua.kpi.grader.course.entity.Assignment;
 import ua.kpi.grader.course.entity.Course;
+import ua.kpi.grader.course.entity.Language;
+import ua.kpi.grader.course.entity.ProgrammingTask;
+import ua.kpi.grader.course.entity.TestMode;
 import ua.kpi.grader.course.repository.AssignmentRepository;
 import ua.kpi.grader.course.repository.CourseRepository;
 import ua.kpi.grader.user.entity.Role;
@@ -101,7 +105,7 @@ class AssignmentServiceTest {
     void createAssignment_persistsAndReturnsAssignment() {
         Course course = buildCourse(1L);
         Teacher teacher = buildTeacher(1L, 10L);
-        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null, null);
+        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null);
         Assignment saved = buildAssignment(7L, course, teacher);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
         when(currentUser.getEmail()).thenReturn("teacher10@test.com");
@@ -116,7 +120,7 @@ class AssignmentServiceTest {
 
     @Test
     void createAssignment_throwsResourceNotFoundException_whenCourseNotFound() {
-        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null, null);
+        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null);
         when(courseRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> assignmentService.createAssignment(99L, request))
@@ -127,7 +131,7 @@ class AssignmentServiceTest {
     @Test
     void createAssignment_throwsResourceNotFoundException_whenTeacherNotFound() {
         Course course = buildCourse(1L);
-        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null, null);
+        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
         when(currentUser.getEmail()).thenReturn("nobody@test.com");
         when(teacherRepository.findByUser_Email("nobody@test.com")).thenReturn(Optional.empty());
@@ -161,6 +165,62 @@ class AssignmentServiceTest {
         assertThatThrownBy(() -> assignmentService.updateAssignment(99L, request))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("99");
+    }
+
+    @Test
+    void updateAssignment_addsCodeCheck_whenIncomingProvidedAndNoExisting() {
+        Course course = buildCourse(1L);
+        Teacher teacher = buildTeacher(1L, 10L);
+        Assignment assignment = buildAssignment(5L, course, teacher);
+        assertThat(assignment.getProgrammingTask()).isNull();
+
+        ProgrammingTaskDetails details = new ProgrammingTaskDetails(
+                Language.C, TestMode.IO, null, "int solve(int)", null, List.of());
+        UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, details);
+        when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
+
+        AssignmentResponse result = assignmentService.updateAssignment(5L, request);
+
+        assertThat(assignment.getProgrammingTask()).isNotNull();
+        assertThat(assignment.getProgrammingTask().getLanguage()).isEqualTo(Language.C);
+        assertThat(assignment.getProgrammingTask().getFunctionSignature()).isEqualTo("int solve(int)");
+        assertThat(result.programmingTask()).isNotNull();
+    }
+
+    @Test
+    void updateAssignment_removesCodeCheck_whenIncomingNullAndExistingPresent() {
+        Course course = buildCourse(1L);
+        Teacher teacher = buildTeacher(1L, 10L);
+        Assignment assignment = buildAssignment(5L, course, teacher);
+        ProgrammingTask existing = ProgrammingTask.builder()
+                .language(Language.C)
+                .testMode(TestMode.IO)
+                .functionSignature("int solve(int)")
+                .build();
+        existing.setAssignment(assignment);
+        assignment.setProgrammingTask(existing);
+
+        UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, null);
+        when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
+
+        AssignmentResponse result = assignmentService.updateAssignment(5L, request);
+
+        assertThat(assignment.getProgrammingTask()).isNull();
+        assertThat(result.programmingTask()).isNull();
+    }
+
+    @Test
+    void updateAssignment_leavesCodeCheckUntouched_whenBothNull() {
+        Course course = buildCourse(1L);
+        Teacher teacher = buildTeacher(1L, 10L);
+        Assignment assignment = buildAssignment(5L, course, teacher);
+        UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, null);
+        when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
+
+        AssignmentResponse result = assignmentService.updateAssignment(5L, request);
+
+        assertThat(assignment.getProgrammingTask()).isNull();
+        assertThat(result.programmingTask()).isNull();
     }
 
     // --- deactivateAssignment ---

@@ -15,8 +15,7 @@ public record AssignmentResponse(
         Long createdBy,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
-        ProgrammingTaskDetails programmingTask,
-        FileUploadTaskDetails fileUploadTask
+        ProgrammingTaskDetails programmingTask
 ) {
     public static AssignmentResponse from(Assignment assignment) {
         return new AssignmentResponse(
@@ -30,8 +29,7 @@ public record AssignmentResponse(
                 assignment.getCreatedBy().getId(),
                 assignment.getCreatedAt(),
                 assignment.getUpdatedAt(),
-                ProgrammingTaskDetails.from(assignment.getProgrammingTask()),
-                FileUploadTaskDetails.from(assignment.getFileUploadTask())
+                ProgrammingTaskDetails.from(assignment.getProgrammingTask())
         );
     }
 }
