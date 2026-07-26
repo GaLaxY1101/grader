@@ -16,4 +16,10 @@ public interface GroupStudentRepository extends JpaRepository<GroupStudent, Long
     boolean existsByGroupIdAndStudentId(Long groupId, Long studentId);
 
     Optional<GroupStudent> findByGroupIdAndStudentId(Long groupId, Long studentId);
+
+    @Query("SELECT gs FROM GroupStudent gs JOIN FETCH gs.group WHERE gs.graduatedAt IS NULL")
+    List<GroupStudent> findAllActiveWithGroup();
+
+    @Query("SELECT gs FROM GroupStudent gs JOIN FETCH gs.group WHERE gs.student.id = :studentId AND gs.graduatedAt IS NULL")
+    Optional<GroupStudent> findActiveByStudentId(@Param("studentId") Long studentId);
 }

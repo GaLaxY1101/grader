@@ -102,13 +102,15 @@ public class GroupService {
     }
 
     /**
-     * Adds a student to a group.
+     * Adds a student to a group. A student may hold at most one active
+     * (non-graduated) group membership at a time.
      *
      * @param groupId   the group ID
      * @param studentId the student profile ID
      * @return the created GroupStudentResponse DTO
      * @throws ResourceNotFoundException if the group or student does not exist
-     * @throws IllegalStateException     if the student is already a member of the group
+     * @throws IllegalStateException     if the student is already a member of the group,
+     *                                   or already has an active membership in another group
      */
     @Transactional
     public GroupStudentResponse addStudent(Long groupId, Long studentId) {
@@ -120,6 +122,11 @@ public class GroupService {
             throw new IllegalStateException(
                     "Student " + studentId + " is already a member of group " + groupId);
         }
+        groupStudentRepository.findActiveByStudentId(studentId).ifPresent(existing -> {
+            throw new IllegalStateException(
+                    "Student " + studentId + " already has an active membership in group "
+                            + existing.getGroup().getId());
+        });
         GroupStudent membership = GroupStudent.builder()
                 .group(group)
                 .student(student)

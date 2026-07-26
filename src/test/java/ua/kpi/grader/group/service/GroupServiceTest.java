@@ -82,8 +82,7 @@ class GroupServiceTest {
 
     @Test
     void createGroup_persistsAndReturnsGroup_whenCodeIsUnique() {
-        CreateGroupRequest request = new CreateGroupRequest("CS-23", "Computer Science 2023",
-                "FIOT", "CS", 2023);
+        CreateGroupRequest request = new CreateGroupRequest("CS-23", "FIOT", "CS", 2023);
         AcademicGroup saved = buildGroup(10L, "CS-23", true);
         when(groupRepository.existsByCode("CS-23")).thenReturn(false);
         when(groupRepository.save(any())).thenReturn(saved);
@@ -96,7 +95,7 @@ class GroupServiceTest {
 
     @Test
     void createGroup_throwsIllegalStateException_whenCodeAlreadyExists() {
-        CreateGroupRequest request = new CreateGroupRequest("CS-23", "Duplicate", null, null, 2023);
+        CreateGroupRequest request = new CreateGroupRequest("CS-23", null, null, 2023);
         when(groupRepository.existsByCode("CS-23")).thenReturn(true);
 
         assertThatThrownBy(() -> groupService.createGroup(request))
@@ -109,19 +108,19 @@ class GroupServiceTest {
     @Test
     void updateGroup_updatesFields_whenCodeIsAvailable() {
         AcademicGroup group = buildGroup(3L, "OLD-21", true);
-        UpdateGroupRequest request = new UpdateGroupRequest("NEW-21", "New Name", "FIOT", "CS", 2021);
+        UpdateGroupRequest request = new UpdateGroupRequest("NEW-21", "FIOT", "CS", 2021);
         when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
         when(groupRepository.existsByCodeAndIdNot("NEW-21", 3L)).thenReturn(false);
 
         GroupResponse result = groupService.updateGroup(3L, request);
 
         assertThat(result.code()).isEqualTo("NEW-21");
-        assertThat(result.name()).isEqualTo("New Name");
+        assertThat(result.faculty()).isEqualTo("FIOT");
     }
 
     @Test
     void updateGroup_throwsResourceNotFoundException_whenGroupNotFound() {
-        UpdateGroupRequest request = new UpdateGroupRequest("X", "Y", null, null, 2020);
+        UpdateGroupRequest request = new UpdateGroupRequest("X", null, null, 2020);
         when(groupRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> groupService.updateGroup(99L, request))
@@ -132,7 +131,7 @@ class GroupServiceTest {
     @Test
     void updateGroup_throwsIllegalStateException_whenCodeTakenByAnotherGroup() {
         AcademicGroup group = buildGroup(3L, "CS-21", true);
-        UpdateGroupRequest request = new UpdateGroupRequest("TAKEN", "Name", null, null, 2021);
+        UpdateGroupRequest request = new UpdateGroupRequest("TAKEN", null, null, 2021);
         when(groupRepository.findById(3L)).thenReturn(Optional.of(group));
         when(groupRepository.existsByCodeAndIdNot("TAKEN", 3L)).thenReturn(true);
 
@@ -173,12 +172,32 @@ class GroupServiceTest {
         when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
         when(studentRepository.findById(2L)).thenReturn(Optional.of(student));
         when(groupStudentRepository.existsByGroupIdAndStudentId(1L, 2L)).thenReturn(false);
+        when(groupStudentRepository.findActiveByStudentId(2L)).thenReturn(Optional.empty());
         when(groupStudentRepository.save(any())).thenReturn(saved);
 
         GroupStudentResponse result = groupService.addStudent(1L, 2L);
 
         assertThat(result.email()).isEqualTo("alice@test.com");
         verify(groupStudentRepository).save(any(GroupStudent.class));
+    }
+
+    @Test
+    void addStudent_throwsIllegalStateException_whenStudentAlreadyInAnotherGroup() {
+        AcademicGroup targetGroup = buildGroup(1L, "CS-21", true);
+        AcademicGroup existingGroup = buildGroup(5L, "IP-22", true);
+        Student student = buildStudent(2L, "alice@test.com");
+        GroupStudent existingMembership = GroupStudent.builder()
+                .group(existingGroup).student(student).build();
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(targetGroup));
+        when(studentRepository.findById(2L)).thenReturn(Optional.of(student));
+        when(groupStudentRepository.existsByGroupIdAndStudentId(1L, 2L)).thenReturn(false);
+        when(groupStudentRepository.findActiveByStudentId(2L))
+                .thenReturn(Optional.of(existingMembership));
+
+        assertThatThrownBy(() -> groupService.addStudent(1L, 2L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("active membership");
+        verify(groupStudentRepository, never()).save(any(GroupStudent.class));
     }
 
     @Test
@@ -275,7 +294,6 @@ class GroupServiceTest {
     private AcademicGroup buildGroup(Long id, String code, boolean active) {
         AcademicGroup group = AcademicGroup.builder()
                 .code(code)
-                .name("Group " + code)
                 .yearOfCreation(2021)
                 .build();
         group.setId(id);
