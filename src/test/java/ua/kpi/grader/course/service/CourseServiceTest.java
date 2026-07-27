@@ -15,6 +15,10 @@ import ua.kpi.grader.course.repository.AssignmentRepository;
 import ua.kpi.grader.course.repository.CourseEnrollmentRepository;
 import ua.kpi.grader.course.repository.CourseRepository;
 import ua.kpi.grader.course.repository.CourseTeacherRepository;
+import ua.kpi.grader.group.entity.AcademicGroup;
+import ua.kpi.grader.group.entity.GroupStudent;
+import ua.kpi.grader.group.repository.AcademicGroupRepository;
+import ua.kpi.grader.group.repository.GroupStudentRepository;
 import ua.kpi.grader.user.entity.Role;
 import ua.kpi.grader.user.entity.Student;
 import ua.kpi.grader.user.entity.Teacher;
@@ -29,6 +33,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -52,6 +59,12 @@ class CourseServiceTest {
 
     @Mock
     private StudentRepository studentRepository;
+
+    @Mock
+    private AcademicGroupRepository groupRepository;
+
+    @Mock
+    private GroupStudentRepository groupStudentRepository;
 
     @Mock
     private CurrentUser currentUser;
@@ -180,12 +193,33 @@ class CourseServiceTest {
         when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
         when(studentRepository.findById(2L)).thenReturn(Optional.of(student));
         when(enrollmentRepository.existsByCourseIdAndStudentId(1L, 2L)).thenReturn(false);
+        when(groupStudentRepository.findActiveByStudentId(2L)).thenReturn(Optional.empty());
         when(enrollmentRepository.save(any())).thenReturn(saved);
 
         EnrolledStudentResponse result = courseService.enrollStudent(1L, 2L);
 
         assertThat(result.email()).isEqualTo("student@test.com");
+        assertThat(result.groupId()).isNull();
         verify(enrollmentRepository).save(any(CourseEnrollment.class));
+    }
+
+    @Test
+    void enrollStudent_populatesGroupInfo_whenStudentHasActiveGroup() {
+        Course course = buildCourse(1L, "CS101");
+        Student student = buildStudent(2L, "student@test.com");
+        AcademicGroup group = buildGroup(7L, "IP-22");
+        GroupStudent membership = GroupStudent.builder().group(group).student(student).build();
+        CourseEnrollment saved = CourseEnrollment.builder().course(course).student(student).build();
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(studentRepository.findById(2L)).thenReturn(Optional.of(student));
+        when(enrollmentRepository.existsByCourseIdAndStudentId(1L, 2L)).thenReturn(false);
+        when(groupStudentRepository.findActiveByStudentId(2L)).thenReturn(Optional.of(membership));
+        when(enrollmentRepository.save(any())).thenReturn(saved);
+
+        EnrolledStudentResponse result = courseService.enrollStudent(1L, 2L);
+
+        assertThat(result.groupId()).isEqualTo(7L);
+        assertThat(result.groupCode()).isEqualTo("IP-22");
     }
 
     @Test
@@ -284,14 +318,18 @@ class CourseServiceTest {
     void findStudents_returnsActiveStudents_whenCourseExists() {
         Course course = buildCourse(1L, "CS101");
         Student student = buildStudent(2L, "bob@test.com");
+        AcademicGroup group = buildGroup(9L, "CS-21");
+        GroupStudent membership = GroupStudent.builder().group(group).student(student).build();
         CourseEnrollment enrollment = CourseEnrollment.builder().course(course).student(student).build();
         when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
         when(enrollmentRepository.findAllByCourseIdWithStudentUser(1L)).thenReturn(List.of(enrollment));
+        when(groupStudentRepository.findAllActiveWithGroup()).thenReturn(List.of(membership));
 
         List<EnrolledStudentResponse> result = courseService.findStudents(1L);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).email()).isEqualTo("bob@test.com");
+        assertThat(result.get(0).groupCode()).isEqualTo("CS-21");
     }
 
     @Test
@@ -299,6 +337,201 @@ class CourseServiceTest {
         when(courseRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> courseService.findStudents(99L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("99");
+    }
+
+    // --- enrollGroup ---
+
+    @Test
+    void enrollGroup_enrollsAllMembers_whenNoneAlreadyEnrolled() {
+        Course course = buildCourse(1L, "CS101");
+        AcademicGroup group = buildGroup(5L, "IP-22");
+        Student s1 = buildStudent(10L, "a@test.com");
+        Student s2 = buildStudent(11L, "b@test.com");
+        List<GroupStudent> memberships = List.of(
+                GroupStudent.builder().group(group).student(s1).build(),
+                GroupStudent.builder().group(group).student(s2).build());
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(groupRepository.findById(5L)).thenReturn(Optional.of(group));
+        when(groupStudentRepository.findAllByGroupIdWithStudentUser(5L)).thenReturn(memberships);
+        when(enrollmentRepository.findAllByCourseIdAndStudentIdIn(eq(1L), anyList()))
+                .thenReturn(List.of());
+        when(enrollmentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<EnrolledStudentResponse> result = courseService.enrollGroup(1L, 5L);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).allMatch(r -> "IP-22".equals(r.groupCode()));
+        verify(enrollmentRepository, org.mockito.Mockito.times(2)).save(any(CourseEnrollment.class));
+    }
+
+    @Test
+    void enrollGroup_skipsAlreadyEnrolled_whenPartialOverlap() {
+        Course course = buildCourse(1L, "CS101");
+        AcademicGroup group = buildGroup(5L, "IP-22");
+        Student s1 = buildStudent(10L, "a@test.com");
+        Student s2 = buildStudent(11L, "b@test.com");
+        Student s3 = buildStudent(12L, "c@test.com");
+        List<GroupStudent> memberships = List.of(
+                GroupStudent.builder().group(group).student(s1).build(),
+                GroupStudent.builder().group(group).student(s2).build(),
+                GroupStudent.builder().group(group).student(s3).build());
+        CourseEnrollment existing = CourseEnrollment.builder().course(course).student(s2).build();
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(groupRepository.findById(5L)).thenReturn(Optional.of(group));
+        when(groupStudentRepository.findAllByGroupIdWithStudentUser(5L)).thenReturn(memberships);
+        when(enrollmentRepository.findAllByCourseIdAndStudentIdIn(eq(1L), anyList()))
+                .thenReturn(List.of(existing));
+        when(enrollmentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        List<EnrolledStudentResponse> result = courseService.enrollGroup(1L, 5L);
+
+        assertThat(result).hasSize(2);
+        assertThat(result).extracting(EnrolledStudentResponse::studentId)
+                .containsExactlyInAnyOrder(10L, 12L);
+        verify(enrollmentRepository, org.mockito.Mockito.times(2)).save(any(CourseEnrollment.class));
+    }
+
+    @Test
+    void enrollGroup_reactivatesDroppedEnrollment_whenStudentPreviouslyRemoved() {
+        Course course = buildCourse(1L, "CS101");
+        AcademicGroup group = buildGroup(5L, "IP-22");
+        Student active = buildStudent(10L, "a@test.com");
+        Student dropped = buildStudent(11L, "b@test.com");
+        List<GroupStudent> memberships = List.of(
+                GroupStudent.builder().group(group).student(active).build(),
+                GroupStudent.builder().group(group).student(dropped).build());
+        CourseEnrollment activeEnrollment = CourseEnrollment.builder()
+                .course(course).student(active).build();
+        CourseEnrollment droppedEnrollment = CourseEnrollment.builder()
+                .course(course).student(dropped).build();
+        droppedEnrollment.drop();
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(groupRepository.findById(5L)).thenReturn(Optional.of(group));
+        when(groupStudentRepository.findAllByGroupIdWithStudentUser(5L)).thenReturn(memberships);
+        when(enrollmentRepository.findAllByCourseIdAndStudentIdIn(eq(1L), anyList()))
+                .thenReturn(List.of(activeEnrollment, droppedEnrollment));
+
+        List<EnrolledStudentResponse> result = courseService.enrollGroup(1L, 5L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).studentId()).isEqualTo(11L);
+        assertThat(droppedEnrollment.getStatus()).isEqualTo("ACTIVE");
+        verify(enrollmentRepository, never()).save(any(CourseEnrollment.class));
+    }
+
+    @Test
+    void enrollGroup_returnsEmptyList_whenGroupHasNoMembers() {
+        Course course = buildCourse(1L, "CS101");
+        AcademicGroup group = buildGroup(5L, "IP-22");
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(groupRepository.findById(5L)).thenReturn(Optional.of(group));
+        when(groupStudentRepository.findAllByGroupIdWithStudentUser(5L)).thenReturn(List.of());
+
+        List<EnrolledStudentResponse> result = courseService.enrollGroup(1L, 5L);
+
+        assertThat(result).isEmpty();
+        verify(enrollmentRepository, never()).save(any(CourseEnrollment.class));
+    }
+
+    @Test
+    void enrollGroup_throwsResourceNotFoundException_whenCourseNotFound() {
+        when(courseRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> courseService.enrollGroup(99L, 5L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("99");
+    }
+
+    @Test
+    void enrollGroup_throwsResourceNotFoundException_whenGroupNotFound() {
+        Course course = buildCourse(1L, "CS101");
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(groupRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> courseService.enrollGroup(1L, 99L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("99");
+    }
+
+    // --- unenrollGroup ---
+
+    @Test
+    void unenrollGroup_dropsActiveEnrollmentsForGroupMembers() {
+        Course course = buildCourse(1L, "CS101");
+        AcademicGroup group = buildGroup(5L, "IP-22");
+        Student s1 = buildStudent(10L, "a@test.com");
+        Student s2 = buildStudent(11L, "b@test.com");
+        Student s3 = buildStudent(12L, "c@test.com");
+        List<GroupStudent> memberships = List.of(
+                GroupStudent.builder().group(group).student(s1).build(),
+                GroupStudent.builder().group(group).student(s2).build(),
+                GroupStudent.builder().group(group).student(s3).build());
+        CourseEnrollment activeS1 = CourseEnrollment.builder().course(course).student(s1).build();
+        CourseEnrollment activeS2 = CourseEnrollment.builder().course(course).student(s2).build();
+        CourseEnrollment droppedS3 = CourseEnrollment.builder().course(course).student(s3).build();
+        droppedS3.drop();
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(groupRepository.existsById(5L)).thenReturn(true);
+        when(groupStudentRepository.findAllByGroupIdWithStudentUser(5L)).thenReturn(memberships);
+        when(enrollmentRepository.findAllByCourseIdAndStudentIdIn(eq(1L), anyList()))
+                .thenReturn(List.of(activeS1, activeS2, droppedS3));
+
+        List<Long> result = courseService.unenrollGroup(1L, 5L);
+
+        assertThat(result).containsExactlyInAnyOrder(10L, 11L);
+        assertThat(activeS1.getStatus()).isEqualTo("DROPPED");
+        assertThat(activeS2.getStatus()).isEqualTo("DROPPED");
+        assertThat(droppedS3.getStatus()).isEqualTo("DROPPED");
+    }
+
+    @Test
+    void unenrollGroup_returnsEmptyList_whenNoActiveEnrollments() {
+        Course course = buildCourse(1L, "CS101");
+        AcademicGroup group = buildGroup(5L, "IP-22");
+        Student s1 = buildStudent(10L, "a@test.com");
+        List<GroupStudent> memberships = List.of(
+                GroupStudent.builder().group(group).student(s1).build());
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(groupRepository.existsById(5L)).thenReturn(true);
+        when(groupStudentRepository.findAllByGroupIdWithStudentUser(5L)).thenReturn(memberships);
+        when(enrollmentRepository.findAllByCourseIdAndStudentIdIn(eq(1L), anyList()))
+                .thenReturn(List.of());
+
+        List<Long> result = courseService.unenrollGroup(1L, 5L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void unenrollGroup_returnsEmptyList_whenGroupHasNoMembers() {
+        Course course = buildCourse(1L, "CS101");
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(groupRepository.existsById(5L)).thenReturn(true);
+        when(groupStudentRepository.findAllByGroupIdWithStudentUser(5L)).thenReturn(List.of());
+
+        List<Long> result = courseService.unenrollGroup(1L, 5L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    void unenrollGroup_throwsResourceNotFoundException_whenCourseNotFound() {
+        when(courseRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> courseService.unenrollGroup(99L, 5L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("99");
+    }
+
+    @Test
+    void unenrollGroup_throwsResourceNotFoundException_whenGroupNotFound() {
+        Course course = buildCourse(1L, "CS101");
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(groupRepository.existsById(99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> courseService.unenrollGroup(1L, 99L))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("99");
     }
@@ -342,5 +575,14 @@ class CourseServiceTest {
         Student student = Student.builder().user(user).build();
         student.setId(studentId);
         return student;
+    }
+
+    private AcademicGroup buildGroup(Long id, String code) {
+        AcademicGroup group = AcademicGroup.builder()
+                .code(code)
+                .yearOfCreation(2022)
+                .build();
+        group.setId(id);
+        return group;
     }
 }

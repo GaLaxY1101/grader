@@ -71,6 +71,23 @@ public class CourseController {
         return ResponseEntity.noContent().build();
     }
 
+    @PostMapping("/{id}/groups/{groupId}")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ResponseEntity<List<EnrolledStudentResponse>> enrollGroup(
+            @PathVariable Long id,
+            @PathVariable Long groupId) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(courseService.enrollGroup(id, groupId));
+    }
+
+    @DeleteMapping("/{id}/groups/{groupId}")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ResponseEntity<List<Long>> unenrollGroup(
+            @PathVariable Long id,
+            @PathVariable Long groupId) {
+        return ResponseEntity.ok(courseService.unenrollGroup(id, groupId));
+    }
+
     @GetMapping("/{id}/students")
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<List<EnrolledStudentResponse>> listStudents(@PathVariable Long id) {

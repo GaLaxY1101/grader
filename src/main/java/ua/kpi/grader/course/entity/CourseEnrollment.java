@@ -46,4 +46,11 @@ public class CourseEnrollment {
     public void drop() {
         this.status = "DROPPED";
     }
+
+    /**
+     * Reactivates a previously dropped enrollment.
+     */
+    public void reactivate() {
+        this.status = "ACTIVE";
+    }
 }

@@ -12,13 +12,21 @@ import ua.kpi.grader.course.repository.AssignmentRepository;
 import ua.kpi.grader.course.repository.CourseEnrollmentRepository;
 import ua.kpi.grader.course.repository.CourseRepository;
 import ua.kpi.grader.course.repository.CourseTeacherRepository;
+import ua.kpi.grader.group.entity.AcademicGroup;
+import ua.kpi.grader.group.entity.GroupStudent;
+import ua.kpi.grader.group.repository.AcademicGroupRepository;
+import ua.kpi.grader.group.repository.GroupStudentRepository;
 import ua.kpi.grader.user.entity.Student;
 import ua.kpi.grader.user.entity.Teacher;
 import ua.kpi.grader.user.repository.StudentRepository;
 import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.user.repository.TeacherRepository;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +38,8 @@ public class CourseServiceImpl implements CourseService {
     private final AssignmentRepository assignmentRepository;
     private final TeacherRepository teacherRepository;
     private final StudentRepository studentRepository;
+    private final AcademicGroupRepository groupRepository;
+    private final GroupStudentRepository groupStudentRepository;
     private final CurrentUser currentUser;
 
     /**
@@ -62,10 +72,8 @@ public class CourseServiceImpl implements CourseService {
                 .map(CourseTeacherResponse::from)
                 .toList();
 
-        List<EnrolledStudentResponse> students = enrollmentRepository
-                .findAllByCourseIdWithStudentUser(id).stream()
-                .map(EnrolledStudentResponse::from)
-                .toList();
+        List<EnrolledStudentResponse> students = mapEnrollmentsWithGroup(
+                enrollmentRepository.findAllByCourseIdWithStudentUser(id));
 
         List<AssignmentResponse> assignments = assignmentRepository
                 .findAllByCourseIdAndIsActiveTrue(id).stream()
@@ -160,7 +168,64 @@ public class CourseServiceImpl implements CourseService {
                 .student(student)
                 .build();
 
-        return EnrolledStudentResponse.from(enrollmentRepository.save(enrollment));
+        AcademicGroup activeGroup = groupStudentRepository.findActiveByStudentId(studentId)
+                .map(GroupStudent::getGroup)
+                .orElse(null);
+        return EnrolledStudentResponse.from(enrollmentRepository.save(enrollment), activeGroup);
+    }
+
+    /**
+     * Enrolls all active members of a group into a course. Students with an
+     * ACTIVE enrollment are skipped silently; students with a DROPPED enrollment
+     * are reactivated. Both make the call idempotent for currently-active members
+     * and repeatable after a manual unenroll.
+     *
+     * @param courseId the course ID
+     * @param groupId  the group ID
+     * @return list of students that ended up newly active in the course
+     *         (freshly enrolled + reactivated); may be empty
+     * @throws ResourceNotFoundException if the course or group does not exist
+     */
+    @Override
+    @Transactional
+    public List<EnrolledStudentResponse> enrollGroup(Long courseId, Long groupId) {
+        Course course = findCourseOrThrow(courseId);
+        AcademicGroup group = groupRepository.findById(groupId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Group not found with id: " + groupId));
+
+        List<GroupStudent> memberships = groupStudentRepository.findAllByGroupIdWithStudentUser(groupId);
+        if (memberships.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> studentIds = memberships.stream()
+                .map(gs -> gs.getStudent().getId())
+                .toList();
+        Map<Long, CourseEnrollment> existingByStudentId = enrollmentRepository
+                .findAllByCourseIdAndStudentIdIn(courseId, studentIds).stream()
+                .collect(Collectors.toMap(ce -> ce.getStudent().getId(), Function.identity()));
+
+        List<EnrolledStudentResponse> affected = new ArrayList<>();
+        for (GroupStudent membership : memberships) {
+            Student student = membership.getStudent();
+            CourseEnrollment existing = existingByStudentId.get(student.getId());
+            if (existing != null && "ACTIVE".equals(existing.getStatus())) {
+                continue;
+            }
+            CourseEnrollment enrollment;
+            if (existing != null) {
+                existing.reactivate();
+                enrollment = existing;
+            } else {
+                enrollment = enrollmentRepository.save(CourseEnrollment.builder()
+                        .course(course)
+                        .student(student)
+                        .build());
+            }
+            affected.add(EnrolledStudentResponse.from(enrollment, group));
+        }
+        return affected;
     }
 
     /**
@@ -182,7 +247,44 @@ public class CourseServiceImpl implements CourseService {
     }
 
     /**
-     * Returns all enrolled students of a course.
+     * Soft-drops every ACTIVE enrollment for members of the given group.
+     * Non-active or non-existent enrollments are ignored, making the call idempotent.
+     *
+     * @param courseId the course ID
+     * @param groupId  the group ID
+     * @return list of student IDs whose enrollment status was changed to DROPPED (may be empty)
+     * @throws ResourceNotFoundException if the course or group does not exist
+     */
+    @Override
+    @Transactional
+    public List<Long> unenrollGroup(Long courseId, Long groupId) {
+        findCourseOrThrow(courseId);
+        if (!groupRepository.existsById(groupId)) {
+            throw new ResourceNotFoundException("Group not found with id: " + groupId);
+        }
+
+        List<GroupStudent> memberships = groupStudentRepository.findAllByGroupIdWithStudentUser(groupId);
+        if (memberships.isEmpty()) {
+            return List.of();
+        }
+        List<Long> studentIds = memberships.stream()
+                .map(gs -> gs.getStudent().getId())
+                .toList();
+
+        List<Long> unenrolled = new ArrayList<>();
+        for (CourseEnrollment enrollment : enrollmentRepository
+                .findAllByCourseIdAndStudentIdIn(courseId, studentIds)) {
+            if (!"ACTIVE".equals(enrollment.getStatus())) {
+                continue;
+            }
+            enrollment.drop();
+            unenrolled.add(enrollment.getStudent().getId());
+        }
+        return unenrolled;
+    }
+
+    /**
+     * Returns all active enrolled students of a course, with their current active group if any.
      *
      * @param courseId the course ID
      * @return list of EnrolledStudentResponse DTOs
@@ -192,9 +294,8 @@ public class CourseServiceImpl implements CourseService {
     @Transactional(readOnly = true)
     public List<EnrolledStudentResponse> findStudents(Long courseId) {
         findCourseOrThrow(courseId);
-        return enrollmentRepository.findAllByCourseIdWithStudentUser(courseId).stream()
-                .map(EnrolledStudentResponse::from)
-                .toList();
+        return mapEnrollmentsWithGroup(
+                enrollmentRepository.findAllByCourseIdWithStudentUser(courseId));
     }
 
     /**
@@ -258,6 +359,22 @@ public class CourseServiceImpl implements CourseService {
         findCourseOrThrow(courseId);
         return courseTeacherRepository.findAllByCourseIdWithTeacherUser(courseId).stream()
                 .map(CourseTeacherResponse::from)
+                .toList();
+    }
+
+    private List<EnrolledStudentResponse> mapEnrollmentsWithGroup(List<CourseEnrollment> enrollments) {
+        if (enrollments.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, AcademicGroup> activeGroupByStudentId = groupStudentRepository
+                .findAllActiveWithGroup().stream()
+                .collect(Collectors.toMap(
+                        gs -> gs.getStudent().getId(),
+                        GroupStudent::getGroup,
+                        (a, b) -> a));
+        return enrollments.stream()
+                .map(ce -> EnrolledStudentResponse.from(
+                        ce, activeGroupByStudentId.get(ce.getStudent().getId())))
                 .toList();
     }
 
