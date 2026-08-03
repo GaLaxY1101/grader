@@ -38,13 +38,15 @@ class GradesXlsxWriter {
             header.createCell(col++).setCellValue("Email");
             for (AssignmentGradeSummary a : gradebook.assignments()) {
                 Cell c = header.createCell(col++);
-                c.setCellValue(a.title() + " (/" + a.maxScore() + ")");
+                Integer max = a.maxScore();
+                c.setCellValue(a.title() + "\n/" + (max == null ? 0 : max));
             }
             header.createCell(col).setCellValue("Total");
             int lastCol = col;
             for (int i = 0; i <= lastCol; i++) {
                 header.getCell(i).setCellStyle(headerStyle);
             }
+            header.setHeightInPoints(30);
 
             int rowIdx = 1;
             for (StudentGradesRow row : gradebook.students()) {
@@ -55,11 +57,7 @@ class GradesXlsxWriter {
                 r.createCell(c++).setCellValue(nullToEmpty(row.email()));
                 for (StudentGradeCell cell : row.grades()) {
                     Cell gc = r.createCell(c++);
-                    if (cell.grade() != null) {
-                        gc.setCellValue(cell.grade());
-                    } else if (cell.status() != null) {
-                        gc.setCellValue("(" + cell.status() + ")");
-                    }
+                    gc.setCellValue(cell.grade() != null ? cell.grade() : 0);
                 }
                 r.createCell(c).setCellValue(row.total() + "/" + row.maxTotal());
             }
@@ -81,6 +79,7 @@ class GradesXlsxWriter {
         Font font = wb.createFont();
         font.setBold(true);
         style.setFont(font);
+        style.setWrapText(true);
         return style;
     }
 

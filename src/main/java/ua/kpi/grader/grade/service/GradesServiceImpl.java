@@ -31,7 +31,6 @@ public class GradesServiceImpl implements GradesService {
     private final CourseEnrollmentRepository enrollmentRepository;
     private final AssignmentRepository assignmentRepository;
     private final SubmissionRepository submissionRepository;
-    private final GradesCsvWriter csvWriter;
     private final GradesXlsxWriter xlsxWriter;
 
     @Override
@@ -42,14 +41,16 @@ public class GradesServiceImpl implements GradesService {
 
     @Override
     @Transactional(readOnly = true)
-    public byte[] exportCourseGradesCsv(Long courseId) {
-        return csvWriter.write(buildGradebook(courseId));
+    public ExportedGradebook exportCourseGradesXlsx(Long courseId) {
+        CourseGradesResponse gradebook = buildGradebook(courseId);
+        String filename = "grades-" + safeName(gradebook.courseName(), courseId) + ".xlsx";
+        return new ExportedGradebook(filename, xlsxWriter.write(gradebook));
     }
 
-    @Override
-    @Transactional(readOnly = true)
-    public byte[] exportCourseGradesXlsx(Long courseId) {
-        return xlsxWriter.write(buildGradebook(courseId));
+    private static String safeName(String courseName, Long courseId) {
+        String base = courseName == null ? "" : courseName;
+        String cleaned = base.replaceAll("[<>:\"/\\\\|?*]+", "").trim().replaceAll("\\s+", "-");
+        return cleaned.isEmpty() ? "course-" + courseId : cleaned;
     }
 
     private CourseGradesResponse buildGradebook(Long courseId) {

@@ -4,6 +4,8 @@ import ua.kpi.grader.course.dto.CourseGradesResponse;
 
 public interface GradesService {
 
+    record ExportedGradebook(String filename, byte[] bytes) {}
+
     /**
      * Assembles the full gradebook for a course: assignments across columns,
      * active enrollees down rows, per-cell grade + submission status, and
@@ -15,19 +17,11 @@ public interface GradesService {
     CourseGradesResponse getCourseGrades(Long courseId);
 
     /**
-     * Renders the course gradebook to CSV bytes for streaming to the client.
-     *
-     * @param courseId the course id
-     * @return CSV payload (UTF-8)
-     */
-    byte[] exportCourseGradesCsv(Long courseId);
-
-    /**
      * Renders the course gradebook to an XLSX workbook (Apache POI) for
      * streaming to the client.
      *
      * @param courseId the course id
      * @return XLSX payload
      */
-    byte[] exportCourseGradesXlsx(Long courseId);
+    ExportedGradebook exportCourseGradesXlsx(Long courseId);
 }
