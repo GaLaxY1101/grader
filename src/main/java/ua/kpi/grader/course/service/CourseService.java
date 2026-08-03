@@ -1,5 +1,7 @@
 package ua.kpi.grader.course.service;
 
+import org.springframework.data.domain.Pageable;
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.course.dto.*;
 
 import java.util.List;
@@ -7,9 +9,16 @@ import java.util.List;
 public interface CourseService {
 
     /**
-     * Returns all active courses.
+     * Returns a page of active courses filtered by an optional free-text term
+     * (matched against course name or the code of any academic group whose
+     * members are currently enrolled) and an optional group id.
+     *
+     * @param query    free-text search term; blank/null disables text filtering
+     * @param groupId  restrict to courses containing at least one active enrollment
+     *                 from a member of this group; null disables the filter
+     * @param pageable paging & sort
      */
-    List<CourseResponse> findAllActive();
+    PageResponse<CourseResponse> findAll(String query, Long groupId, Pageable pageable);
 
     /**
      * Returns a course with its teachers, enrolled students, and assignments.

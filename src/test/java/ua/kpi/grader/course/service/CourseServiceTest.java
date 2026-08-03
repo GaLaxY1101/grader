@@ -5,7 +5,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.course.dto.*;
 import ua.kpi.grader.course.entity.Course;
@@ -72,17 +77,34 @@ class CourseServiceTest {
     @InjectMocks
     private CourseServiceImpl courseService;
 
-    // --- findAllActive ---
+    // --- findAll ---
 
     @Test
-    void findAllActive_returnsActiveCourses() {
+    void findAll_returnsPageOfActiveCourses_withNormalizedQuery() {
         Course course = buildCourse(1L, "Math");
-        when(courseRepository.findAllByIsActiveTrue()).thenReturn(List.of(course));
+        Pageable pageable = PageRequest.of(0, 12);
+        Page<Course> page = new PageImpl<>(List.of(course), pageable, 1);
+        when(courseRepository.search(eq("math"), eq(null), eq(true), eq(pageable)))
+                .thenReturn(page);
 
-        List<CourseResponse> result = courseService.findAllActive();
+        PageResponse<CourseResponse> result = courseService.findAll("  Math  ", null, pageable);
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).name()).isEqualTo("Math");
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).name()).isEqualTo("Math");
+        assertThat(result.totalElements()).isEqualTo(1);
+        assertThat(result.page()).isZero();
+    }
+
+    @Test
+    void findAll_passesNullQuery_whenBlank() {
+        Pageable pageable = PageRequest.of(0, 12);
+        when(courseRepository.search(eq(null), eq(5L), eq(true), eq(pageable)))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        PageResponse<CourseResponse> result = courseService.findAll("   ", 5L, pageable);
+
+        assertThat(result.content()).isEmpty();
+        assertThat(result.totalElements()).isZero();
     }
 
     // --- findById ---

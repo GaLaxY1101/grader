@@ -1,8 +1,11 @@
 package ua.kpi.grader.course.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.course.dto.*;
 import ua.kpi.grader.course.entity.Course;
@@ -43,16 +46,31 @@ public class CourseServiceImpl implements CourseService {
     private final CurrentUser currentUser;
 
     /**
-     * Returns all active courses (is_active = true).
+     * Returns a page of active courses. A non-blank {@code query} matches the
+     * course name or the code of any academic group whose members are currently
+     * ACTIVE-enrolled in the course. A non-null {@code groupId} restricts the
+     * result to courses with at least one active enrollment from a member of
+     * that group.
      *
-     * @return list of active CourseResponse DTOs
+     * @param query    free-text search term (blank/null disables text filter)
+     * @param groupId  academic group id filter (null disables)
+     * @param pageable paging & sort
+     * @return page of CourseResponse DTOs wrapped in PageResponse
      */
     @Override
     @Transactional(readOnly = true)
-    public List<CourseResponse> findAllActive() {
-        return courseRepository.findAllByIsActiveTrue().stream()
-                .map(CourseResponse::from)
-                .toList();
+    public PageResponse<CourseResponse> findAll(String query, Long groupId, Pageable pageable) {
+        String normalized = normalizeQuery(query);
+        Page<CourseResponse> page = courseRepository
+                .search(normalized, groupId, true, pageable)
+                .map(CourseResponse::from);
+        return PageResponse.from(page);
+    }
+
+    private static String normalizeQuery(String query) {
+        if (query == null) return null;
+        String trimmed = query.trim();
+        return trimmed.isEmpty() ? null : trimmed.toLowerCase();
     }
 
     /**

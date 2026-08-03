@@ -2,10 +2,14 @@ package ua.kpi.grader.course.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.course.dto.*;
 import ua.kpi.grader.course.service.CourseService;
 
@@ -20,8 +24,12 @@ public class CourseController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
-    public ResponseEntity<List<CourseResponse>> listCourses() {
-        return ResponseEntity.ok(courseService.findAllActive());
+    public ResponseEntity<PageResponse<CourseResponse>> listCourses(
+            @RequestParam(required = false) String query,
+            @RequestParam(required = false) Long groupId,
+            @ParameterObject @PageableDefault(size = 12, sort = "createdAt",
+                    direction = org.springframework.data.domain.Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(courseService.findAll(query, groupId, pageable));
     }
 
     @GetMapping("/{id}")
