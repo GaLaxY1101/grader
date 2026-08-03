@@ -1,5 +1,6 @@
 package ua.kpi.grader.submission.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -51,6 +52,13 @@ public class SubmissionController {
                 .orElse(ResponseEntity.noContent().build());
     }
 
+    @GetMapping("/api/courses/{courseId}/submissions/my")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<List<SubmissionResponse>> listMySubmissionsInCourse(
+            @PathVariable Long courseId) {
+        return ResponseEntity.ok(submissionService.listMySubmissionsInCourse(courseId));
+    }
+
     @GetMapping("/api/submissions/{submissionId}/attempts")
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<List<AttemptResponse>> listAttempts(@PathVariable Long submissionId) {
@@ -61,5 +69,13 @@ public class SubmissionController {
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<AttemptStatusResponse> getAttemptStatus(@PathVariable Long attemptId) {
         return ResponseEntity.ok(submissionService.getAttemptStatus(attemptId));
+    }
+
+    @PatchMapping("/api/submissions/{id}/grade")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ResponseEntity<SubmissionResponse> updateGrade(
+            @PathVariable Long id,
+            @RequestBody @Valid UpdateGradeRequest request) {
+        return ResponseEntity.ok(submissionService.updateGrade(id, request));
     }
 }

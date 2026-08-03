@@ -47,6 +47,9 @@ public class Submission {
     @Column(name = "best_score")
     private Integer bestScore;
 
+    @Column
+    private Integer grade;
+
     @Column(name = "gitlab_project_id")
     private Long gitlabProjectId;
 
@@ -78,6 +81,8 @@ public class Submission {
      * Propagates attempt results to the submission aggregate.
      * Always updates bestScore. Only updates status/score/latestAttempt
      * if this attempt is the most recent one (highest attempt number).
+     * Auto-populates grade on first PASSED result; never overwrites an
+     * existing grade (teacher overrides survive future auto-runs).
      */
     public void updateFromAttempt(Attempt attempt) {
         if (attempt.getScore() != null) {
@@ -92,5 +97,18 @@ public class Submission {
             this.score = attempt.getScore();
             this.latestAttempt = attempt;
         }
+
+        if (this.grade == null
+                && attempt.getStatus() == SubmissionStatus.PASSED
+                && this.bestScore != null) {
+            this.grade = this.bestScore;
+        }
+    }
+
+    /**
+     * Sets the teacher-assigned grade. Pass null to clear.
+     */
+    public void assignGrade(Integer newGrade) {
+        this.grade = newGrade;
     }
 }

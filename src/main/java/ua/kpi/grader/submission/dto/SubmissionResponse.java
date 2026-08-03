@@ -13,6 +13,7 @@ public record SubmissionResponse(
         SubmissionStatus status,
         Integer score,
         Integer bestScore,
+        Integer grade,
         int attemptCount,
         Long latestAttemptId,
         OffsetDateTime createdAt,
@@ -27,6 +28,7 @@ public record SubmissionResponse(
                 submission.getStatus(),
                 submission.getScore(),
                 submission.getBestScore(),
+                submission.getGrade(),
                 submission.getAttempts().size(),
                 submission.getLatestAttempt() != null
                         ? submission.getLatestAttempt().getId()

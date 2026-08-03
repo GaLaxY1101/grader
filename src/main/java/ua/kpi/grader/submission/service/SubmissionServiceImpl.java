@@ -134,6 +134,22 @@ public class SubmissionServiceImpl implements SubmissionService {
     }
 
     /**
+     * Returns all submissions the authenticated student has in the given course.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public List<SubmissionResponse> listMySubmissionsInCourse(Long courseId) {
+        String email = currentUser.getEmail();
+        Student student = studentRepository.findByUser_Email(email)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Student not found for user: " + email));
+        return submissionRepository
+                .findAllByCourseIdAndStudentId(courseId, student.getId()).stream()
+                .map(SubmissionResponse::from)
+                .toList();
+    }
+
+    /**
      * Returns all attempts for a submission, newest first.
      */
     @Override
@@ -185,6 +201,26 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         log.info("Applied GitLab result to attempt id={} (submission={}): status={}, score={}",
                 attempt.getId(), submission.getId(), status, score);
+    }
+
+    /**
+     * Sets or clears the teacher-assigned grade on a submission.
+     * Validates that the grade is within 0..assignment.maxScore.
+     */
+    @Override
+    @Transactional
+    public SubmissionResponse updateGrade(Long id, UpdateGradeRequest request) {
+        Submission submission = findWithDetailsOrThrow(id);
+        Integer newGrade = request.grade();
+        if (newGrade != null) {
+            Integer maxScore = submission.getAssignment().getMaxScore();
+            if (newGrade < 0 || (maxScore != null && newGrade > maxScore)) {
+                throw new IllegalArgumentException(
+                        "Grade must be between 0 and " + maxScore + ", got: " + newGrade);
+            }
+        }
+        submission.assignGrade(newGrade);
+        return SubmissionResponse.from(submission);
     }
 
     private SubmissionStatus mapStatus(String gitlabStatus) {

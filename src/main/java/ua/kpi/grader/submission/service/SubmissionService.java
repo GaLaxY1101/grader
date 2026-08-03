@@ -54,6 +54,15 @@ public interface SubmissionService {
     Optional<SubmissionResponse> getMySubmission(Long assignmentId);
 
     /**
+     * Returns all submissions the authenticated student has in the given course,
+     * one per assignment (or empty if the student hasn't submitted for that assignment).
+     *
+     * @param courseId the course ID
+     * @return list of SubmissionResponse DTOs (may be empty)
+     */
+    List<SubmissionResponse> listMySubmissionsInCourse(Long courseId);
+
+    /**
      * Returns all attempts for a submission, newest first.
      * Students may only access their own; teachers/admins may access any.
      *
@@ -80,4 +89,14 @@ public interface SubmissionService {
      * @param gitlabStatus     the pipeline status string from GitLab (e.g. "success", "failed")
      */
     void applyGitLabResult(Long gitlabProjectId, Long gitlabPipelineId, String gitlabStatus);
+
+    /**
+     * Sets the teacher-assigned grade for a submission. Pass a null grade to clear it.
+     * Grade is validated against 0..assignment.maxScore.
+     *
+     * @param id      the submission id
+     * @param request the payload carrying the grade (may be null to clear)
+     * @return the updated SubmissionResponse DTO
+     */
+    SubmissionResponse updateGrade(Long id, UpdateGradeRequest request);
 }
