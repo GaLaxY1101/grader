@@ -87,7 +87,7 @@ class CourseServiceTest {
         when(courseRepository.search(eq("math"), eq(null), eq(true), eq(pageable)))
                 .thenReturn(page);
 
-        PageResponse<CourseResponse> result = courseService.findAll("  Math  ", null, pageable);
+        PageResponse<CourseResponse> result = courseService.findAll("  Math  ", null, true, pageable);
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.content().get(0).name()).isEqualTo("Math");
@@ -101,7 +101,7 @@ class CourseServiceTest {
         when(courseRepository.search(eq(null), eq(5L), eq(true), eq(pageable)))
                 .thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
-        PageResponse<CourseResponse> result = courseService.findAll("   ", 5L, pageable);
+        PageResponse<CourseResponse> result = courseService.findAll("   ", 5L, true, pageable);
 
         assertThat(result.content()).isEmpty();
         assertThat(result.totalElements()).isZero();

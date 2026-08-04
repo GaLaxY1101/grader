@@ -68,4 +68,11 @@ public class Course {
     public void deactivate() {
         this.isActive = false;
     }
+
+    /**
+     * Restores this course from the archive by marking it active again.
+     */
+    public void activate() {
+        this.isActive = true;
+    }
 }

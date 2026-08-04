@@ -46,23 +46,24 @@ public class CourseServiceImpl implements CourseService {
     private final CurrentUser currentUser;
 
     /**
-     * Returns a page of active courses. A non-blank {@code query} matches the
-     * course name or the code of any academic group whose members are currently
-     * ACTIVE-enrolled in the course. A non-null {@code groupId} restricts the
-     * result to courses with at least one active enrollment from a member of
-     * that group.
+     * Returns a page of courses filtered by active/inactive status. A non-blank
+     * {@code query} matches the course name or the code of any academic group
+     * whose members are currently ACTIVE-enrolled in the course. A non-null
+     * {@code groupId} restricts the result to courses with at least one active
+     * enrollment from a member of that group.
      *
      * @param query    free-text search term (blank/null disables text filter)
      * @param groupId  academic group id filter (null disables)
+     * @param isActive when true returns active courses; when false returns archived courses
      * @param pageable paging & sort
      * @return page of CourseResponse DTOs wrapped in PageResponse
      */
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<CourseResponse> findAll(String query, Long groupId, Pageable pageable) {
+    public PageResponse<CourseResponse> findAll(String query, Long groupId, boolean isActive, Pageable pageable) {
         String normalized = normalizeQuery(query);
         Page<CourseResponse> page = courseRepository
-                .search(normalized, groupId, true, pageable)
+                .search(normalized, groupId, isActive, pageable)
                 .map(CourseResponse::from);
         return PageResponse.from(page);
     }
@@ -157,6 +158,19 @@ public class CourseServiceImpl implements CourseService {
     public void deactivateCourse(Long id) {
         Course course = findCourseOrThrow(id);
         course.deactivate();
+    }
+
+    /**
+     * Restores an archived course by setting is_active = true.
+     *
+     * @param id the course ID
+     * @throws ResourceNotFoundException if the course does not exist
+     */
+    @Override
+    @Transactional
+    public void activateCourse(Long id) {
+        Course course = findCourseOrThrow(id);
+        course.activate();
     }
 
     /**

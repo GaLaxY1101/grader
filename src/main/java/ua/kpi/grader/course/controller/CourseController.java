@@ -27,9 +27,10 @@ public class CourseController {
     public ResponseEntity<PageResponse<CourseResponse>> listCourses(
             @RequestParam(required = false) String query,
             @RequestParam(required = false) Long groupId,
+            @RequestParam(defaultValue = "true") boolean isActive,
             @ParameterObject @PageableDefault(size = 12, sort = "createdAt",
                     direction = org.springframework.data.domain.Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(courseService.findAll(query, groupId, pageable));
+        return ResponseEntity.ok(courseService.findAll(query, groupId, isActive, pageable));
     }
 
     @GetMapping("/{id}")
@@ -58,6 +59,13 @@ public class CourseController {
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<Void> deactivateCourse(@PathVariable Long id) {
         courseService.deactivateCourse(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/activate")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ResponseEntity<Void> activateCourse(@PathVariable Long id) {
+        courseService.activateCourse(id);
         return ResponseEntity.noContent().build();
     }
 

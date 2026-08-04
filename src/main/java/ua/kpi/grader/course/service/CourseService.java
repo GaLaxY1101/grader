@@ -9,16 +9,17 @@ import java.util.List;
 public interface CourseService {
 
     /**
-     * Returns a page of active courses filtered by an optional free-text term
-     * (matched against course name or the code of any academic group whose
-     * members are currently enrolled) and an optional group id.
+     * Returns a page of courses filtered by active/inactive status, an optional
+     * free-text term (matched against course name or the code of any academic
+     * group whose members are currently enrolled) and an optional group id.
      *
      * @param query    free-text search term; blank/null disables text filtering
      * @param groupId  restrict to courses containing at least one active enrollment
      *                 from a member of this group; null disables the filter
+     * @param isActive when true returns active courses; when false returns archived courses
      * @param pageable paging & sort
      */
-    PageResponse<CourseResponse> findAll(String query, Long groupId, Pageable pageable);
+    PageResponse<CourseResponse> findAll(String query, Long groupId, boolean isActive, Pageable pageable);
 
     /**
      * Returns a course with its teachers, enrolled students, and assignments.
@@ -39,6 +40,11 @@ public interface CourseService {
      * Soft-deletes a course by setting is_active = false.
      */
     void deactivateCourse(Long id);
+
+    /**
+     * Restores an archived course by setting is_active = true.
+     */
+    void activateCourse(Long id);
 
     /**
      * Enrolls a student in a course.
