@@ -9,6 +9,7 @@ public record CreateCourseRequest(
         @NotBlank String name,
         String description,
         @NotNull Integer academicYear,
-        @NotNull @Min(1) @Max(2) Integer semester
+        @NotNull @Min(1) @Max(2) Integer semester,
+        Long templateId
 ) {
 }

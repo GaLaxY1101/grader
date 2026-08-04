@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
+import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.user.dto.CreateTeacherRequest;
 import ua.kpi.grader.user.dto.TeacherResponse;
 import ua.kpi.grader.user.entity.Teacher;
@@ -17,6 +18,7 @@ public class TeacherService {
 
     private final TeacherRepository teacherRepository;
     private final UserService userService;
+    private final CurrentUser currentUser;
 
     /**
      * Returns all teacher profiles.
@@ -66,6 +68,21 @@ public class TeacherService {
                 .academicDegree(request.academicDegree())
                 .build();
         return TeacherResponse.from(teacherRepository.save(teacher));
+    }
+
+    /**
+     * Returns the teacher profile of the currently authenticated user.
+     *
+     * @return TeacherResponse for the current user
+     * @throws ResourceNotFoundException if the current user has no teacher profile
+     */
+    @Transactional(readOnly = true)
+    public TeacherResponse findCurrent() {
+        String email = currentUser.getEmail();
+        return teacherRepository.findByUser_Email(email)
+                .map(TeacherResponse::from)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Teacher not found for user: " + email));
     }
 
     /**

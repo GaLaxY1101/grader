@@ -23,6 +23,11 @@ public class TeacherController {
         return ResponseEntity.ok(teacherService.findAll());
     }
 
+    @GetMapping("/me")
+    public ResponseEntity<TeacherResponse> getCurrentTeacher() {
+        return ResponseEntity.ok(teacherService.findCurrent());
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<TeacherResponse> getTeacher(@PathVariable Long id) {
         return ResponseEntity.ok(teacherService.findById(id));

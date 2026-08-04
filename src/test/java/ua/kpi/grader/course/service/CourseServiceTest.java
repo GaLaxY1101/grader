@@ -74,6 +74,15 @@ class CourseServiceTest {
     @Mock
     private CurrentUser currentUser;
 
+    @Mock
+    private ua.kpi.grader.template.service.TemplateAccessService templateAccess;
+
+    @Mock
+    private ua.kpi.grader.template.repository.TemplateAssignmentRepository templateAssignmentRepository;
+
+    @Mock
+    private ua.kpi.grader.template.mapper.TemplateToCourseMapper templateToCourseMapper;
+
     @InjectMocks
     private CourseServiceImpl courseService;
 
@@ -138,7 +147,7 @@ class CourseServiceTest {
     @Test
     void createCourse_persistsAndReturnsCourse() {
         Teacher teacher = buildTeacher(1L, 10L);
-        CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1);
+        CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1, null);
         Course saved = buildCourse(5L, "CS101");
         when(currentUser.getEmail()).thenReturn("teacher10@test.com");
         when(teacherRepository.findByUser_Email("teacher10@test.com")).thenReturn(Optional.of(teacher));
@@ -152,7 +161,7 @@ class CourseServiceTest {
 
     @Test
     void createCourse_throwsResourceNotFoundException_whenTeacherNotFound() {
-        CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1);
+        CreateCourseRequest request = new CreateCourseRequest("CS101", null, 2024, 1, null);
         when(currentUser.getEmail()).thenReturn("nobody@test.com");
         when(teacherRepository.findByUser_Email("nobody@test.com")).thenReturn(Optional.empty());
 

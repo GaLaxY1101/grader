@@ -23,6 +23,11 @@ import ua.kpi.grader.user.entity.Student;
 import ua.kpi.grader.user.entity.Teacher;
 import ua.kpi.grader.user.repository.StudentRepository;
 import ua.kpi.grader.security.CurrentUser;
+import ua.kpi.grader.template.entity.CourseTemplate;
+import ua.kpi.grader.template.entity.TemplateAssignment;
+import ua.kpi.grader.template.mapper.TemplateToCourseMapper;
+import ua.kpi.grader.template.repository.TemplateAssignmentRepository;
+import ua.kpi.grader.template.service.TemplateAccessService;
 import ua.kpi.grader.user.repository.TeacherRepository;
 
 import java.util.ArrayList;
@@ -44,6 +49,9 @@ public class CourseServiceImpl implements CourseService {
     private final AcademicGroupRepository groupRepository;
     private final GroupStudentRepository groupStudentRepository;
     private final CurrentUser currentUser;
+    private final TemplateAccessService templateAccess;
+    private final TemplateAssignmentRepository templateAssignmentRepository;
+    private final TemplateToCourseMapper templateToCourseMapper;
 
     /**
      * Returns a page of courses filtered by active/inactive status. A non-blank
@@ -104,11 +112,15 @@ public class CourseServiceImpl implements CourseService {
 
     /**
      * Creates a new course owned by the currently authenticated teacher.
-     * The teacher is resolved from the Keycloak JWT email claim.
+     * The teacher is resolved from the Keycloak JWT email claim. When the
+     * request carries a {@code templateId}, the template's assignments (with
+     * their programming tasks and test cases) are snapshotted into the new
+     * course; deadlines are left null for the teacher to fill in.
      *
      * @param request the creation payload
      * @return the persisted CourseResponse DTO
-     * @throws ResourceNotFoundException if no teacher profile exists for the current user
+     * @throws ResourceNotFoundException if no teacher profile exists for the current
+     *                                   user, or if the referenced template does not exist
      */
     @Override
     @Transactional
@@ -120,15 +132,25 @@ public class CourseServiceImpl implements CourseService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Teacher not found for user: " + email));
 
-        Course course = Course.builder()
+        Course course = courseRepository.save(Course.builder()
                 .name(request.name())
                 .description(request.description())
                 .academicYear(request.academicYear())
                 .semester(request.semester())
                 .createdBy(teacher)
-                .build();
+                .build());
 
-        return CourseResponse.from(courseRepository.save(course));
+        if (request.templateId() != null) {
+            instantiateFromTemplate(course, teacher, request.templateId());
+        }
+        return CourseResponse.from(course);
+    }
+
+    private void instantiateFromTemplate(Course course, Teacher createdBy, Long templateId) {
+        CourseTemplate template = templateAccess.requireView(templateId);
+        for (TemplateAssignment src : templateAssignmentRepository.findAllByTemplateId(template.getId())) {
+            assignmentRepository.save(templateToCourseMapper.toAssignment(src, course, createdBy));
+        }
     }
 
     /**
