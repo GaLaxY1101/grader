@@ -3,12 +3,8 @@ package ua.kpi.grader.gitlab.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import ua.kpi.grader.course.dto.TestCaseDetails;
 import ua.kpi.grader.course.entity.ProgrammingTask;
 import ua.kpi.grader.course.repository.ProgrammingTaskRepository;
-
-import java.util.List;
-import ua.kpi.grader.course.entity.TestMode;
 import ua.kpi.grader.gitlab.client.GitLabApiClient;
 import ua.kpi.grader.gitlab.client.dto.GitLabPipelineDto;
 import ua.kpi.grader.gitlab.config.GitLabProperties;
@@ -48,12 +44,7 @@ public class GitLabSubmissionService {
                     .orElseThrow(() -> new IllegalStateException(
                             "No programming task found for assignment " + assignmentId));
 
-            List<TestCaseDetails> testCases = task.getTestCases().stream()
-                    .map(TestCaseDetails::from)
-                    .toList();
-            TestMode testMode = task.getTestMode();
-            String ciYaml = ciConfigService.generateCiConfig(task.getLanguage(),
-                    testMode, task.getCiConfigTemplate(), testCases);
+            String ciYaml = ciConfigService.generateCiConfig(task.getCiConfigTemplate());
             String solutionFileName = task.getLanguage().getSolutionFileName();
 
             boolean isFirstAttempt = submission.getGitlabProjectId() == null;
@@ -66,10 +57,8 @@ public class GitLabSubmissionService {
                 gitLabApiClient.pushFile(projectId, solutionFileName,
                         attempt.getCodeContent(), "Add student solution");
 
-                if (testMode == TestMode.UNIT_TEST) {
-                    gitLabApiClient.pushFile(projectId, "test.cpp",
-                            task.getTestFileContent(), "Add teacher test file");
-                }
+                gitLabApiClient.pushFile(projectId, "test.cpp",
+                        task.getTestFileContent(), "Add teacher test file");
 
                 gitLabApiClient.pushFile(projectId, ".gitlab-ci.yml", ciYaml, "Add CI config");
 
@@ -82,11 +71,9 @@ public class GitLabSubmissionService {
                         attempt.getCodeContent(),
                         "Update student solution (attempt %d)".formatted(attempt.getAttemptNumber()));
 
-                if (testMode == TestMode.UNIT_TEST) {
-                    gitLabApiClient.updateFile(projectId, "test.cpp",
-                            task.getTestFileContent(),
-                            "Update teacher test file (attempt %d)".formatted(attempt.getAttemptNumber()));
-                }
+                gitLabApiClient.updateFile(projectId, "test.cpp",
+                        task.getTestFileContent(),
+                        "Update teacher test file (attempt %d)".formatted(attempt.getAttemptNumber()));
 
                 gitLabApiClient.updateFile(projectId, ".gitlab-ci.yml", ciYaml,
                         "Update CI config (attempt %d)".formatted(attempt.getAttemptNumber()));

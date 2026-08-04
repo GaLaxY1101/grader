@@ -1,7 +1,6 @@
 package ua.kpi.grader.template.dto;
 
 import ua.kpi.grader.course.dto.ProgrammingTaskDetails;
-import ua.kpi.grader.course.dto.TestCaseDetails;
 import ua.kpi.grader.template.entity.TemplateAssignment;
 import ua.kpi.grader.template.entity.TemplateProgrammingTask;
 
@@ -37,11 +36,7 @@ public record TemplateAssignmentResponse(
                 task.getTestMode(),
                 task.getCiConfigTemplate(),
                 task.getFunctionSignature(),
-                task.getTestFileContent(),
-                task.getTestCases().stream()
-                        .map(tc -> new TestCaseDetails(tc.getName(), tc.getTestType(),
-                                tc.getInput(), tc.getExpectedOutput()))
-                        .toList()
+                task.getTestFileContent()
         );
     }
 }

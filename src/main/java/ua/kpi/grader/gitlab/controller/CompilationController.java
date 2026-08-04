@@ -7,7 +7,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.course.entity.ProgrammingTask;
-import ua.kpi.grader.course.entity.TestMode;
 import ua.kpi.grader.course.repository.ProgrammingTaskRepository;
 import ua.kpi.grader.gitlab.dto.CompileRequest;
 import ua.kpi.grader.gitlab.dto.CompileResponse;
@@ -51,13 +50,8 @@ public class CompilationController {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Programming task not found for assignment " + assignmentId));
 
-        CompilationResult result;
-        if (task.getTestMode() == TestMode.UNIT_TEST) {
-            result = compilationService.compileSolutionWithTests(
-                    request.solutionCode(), task.getTestFileContent());
-        } else {
-            result = compilationService.compileSolution(request.solutionCode());
-        }
+        CompilationResult result = compilationService.compileSolutionWithTests(
+                request.solutionCode(), task.getTestFileContent());
         return ResponseEntity.ok(new CompileResponse(result.success(), result.output()));
     }
 }

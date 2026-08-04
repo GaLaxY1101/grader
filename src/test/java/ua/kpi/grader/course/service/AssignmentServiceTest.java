@@ -175,14 +175,14 @@ class AssignmentServiceTest {
         assertThat(assignment.getProgrammingTask()).isNull();
 
         ProgrammingTaskDetails details = new ProgrammingTaskDetails(
-                Language.C, TestMode.IO, null, "int solve(int)", null, List.of());
+                Language.CPP, TestMode.UNIT_TEST, null, "int solve(int)", "int main(){return 0;}");
         UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, details);
         when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
 
         AssignmentResponse result = assignmentService.updateAssignment(5L, request);
 
         assertThat(assignment.getProgrammingTask()).isNotNull();
-        assertThat(assignment.getProgrammingTask().getLanguage()).isEqualTo(Language.C);
+        assertThat(assignment.getProgrammingTask().getLanguage()).isEqualTo(Language.CPP);
         assertThat(assignment.getProgrammingTask().getFunctionSignature()).isEqualTo("int solve(int)");
         assertThat(result.programmingTask()).isNotNull();
     }
@@ -193,8 +193,8 @@ class AssignmentServiceTest {
         Teacher teacher = buildTeacher(1L, 10L);
         Assignment assignment = buildAssignment(5L, course, teacher);
         ProgrammingTask existing = ProgrammingTask.builder()
-                .language(Language.C)
-                .testMode(TestMode.IO)
+                .language(Language.CPP)
+                .testMode(TestMode.UNIT_TEST)
                 .functionSignature("int solve(int)")
                 .build();
         existing.setAssignment(assignment);

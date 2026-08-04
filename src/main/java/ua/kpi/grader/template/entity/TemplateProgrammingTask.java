@@ -5,9 +5,6 @@ import lombok.*;
 import ua.kpi.grader.course.entity.Language;
 import ua.kpi.grader.course.entity.TestMode;
 
-import java.util.ArrayList;
-import java.util.List;
-
 @Entity
 @Table(name = "template_programming_tasks")
 @Getter
@@ -36,17 +33,13 @@ public class TemplateProgrammingTask {
     @Enumerated(EnumType.STRING)
     @Column(name = "test_mode", nullable = false, length = 20)
     @Builder.Default
-    private TestMode testMode = TestMode.IO;
+    private TestMode testMode = TestMode.UNIT_TEST;
 
     @Column(name = "function_signature", columnDefinition = "TEXT")
     private String functionSignature;
 
     @Column(name = "test_file_content", columnDefinition = "TEXT")
     private String testFileContent;
-
-    @OneToMany(mappedBy = "programmingTask", cascade = CascadeType.ALL, orphanRemoval = true)
-    @Builder.Default
-    private List<TemplateTestCase> testCases = new ArrayList<>();
 
     /**
      * Updates mutable fields of the template programming task.
@@ -57,13 +50,5 @@ public class TemplateProgrammingTask {
         this.functionSignature = functionSignature;
         this.testFileContent = testFileContent;
         this.ciConfigTemplate = ciConfigTemplate;
-    }
-
-    /**
-     * Replaces all test cases with the provided list.
-     */
-    public void replaceTestCases(List<TemplateTestCase> newTestCases) {
-        this.testCases.clear();
-        this.testCases.addAll(newTestCases);
     }
 }

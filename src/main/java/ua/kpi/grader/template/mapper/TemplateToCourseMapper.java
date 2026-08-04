@@ -4,7 +4,6 @@ import org.springframework.stereotype.Component;
 import ua.kpi.grader.course.entity.Assignment;
 import ua.kpi.grader.course.entity.Course;
 import ua.kpi.grader.course.entity.ProgrammingTask;
-import ua.kpi.grader.course.entity.TestCase;
 import ua.kpi.grader.template.entity.TemplateAssignment;
 import ua.kpi.grader.template.entity.TemplateProgrammingTask;
 import ua.kpi.grader.user.entity.Teacher;
@@ -42,15 +41,6 @@ public class TemplateToCourseMapper {
                 .testFileContent(source.getTestFileContent())
                 .build();
         task.setAssignment(assignment);
-
-        source.getTestCases().forEach(tc -> task.getTestCases().add(
-                TestCase.builder()
-                        .programmingTask(task)
-                        .name(tc.getName())
-                        .testType(tc.getTestType())
-                        .input(tc.getInput())
-                        .expectedOutput(tc.getExpectedOutput())
-                        .build()));
         return task;
     }
 }

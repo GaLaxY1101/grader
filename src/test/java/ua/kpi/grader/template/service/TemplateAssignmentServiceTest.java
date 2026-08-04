@@ -91,7 +91,7 @@ class TemplateAssignmentServiceTest {
         ReflectionTestUtils.setField(a, "id", 10L);
         a.setProgrammingTask(ua.kpi.grader.template.entity.TemplateProgrammingTask.builder()
                 .language(ua.kpi.grader.course.entity.Language.CPP)
-                .testMode(ua.kpi.grader.course.entity.TestMode.IO)
+                .testMode(ua.kpi.grader.course.entity.TestMode.UNIT_TEST)
                 .build());
         when(assignmentRepository.findById(10L)).thenReturn(Optional.of(a));
         when(access.requireEdit(1L)).thenReturn(template);
