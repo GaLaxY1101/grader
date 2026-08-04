@@ -6,11 +6,14 @@ import org.springframework.stereotype.Service;
 import ua.kpi.grader.course.entity.ProgrammingTask;
 import ua.kpi.grader.course.repository.ProgrammingTaskRepository;
 import ua.kpi.grader.gitlab.client.GitLabApiClient;
+import ua.kpi.grader.gitlab.client.GitLabApiClient.FileAction;
 import ua.kpi.grader.gitlab.client.dto.GitLabPipelineDto;
 import ua.kpi.grader.gitlab.config.GitLabProperties;
 import ua.kpi.grader.submission.entity.Attempt;
 import ua.kpi.grader.submission.entity.Submission;
 import ua.kpi.grader.submission.entity.SubmissionStatus;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -48,39 +51,37 @@ public class GitLabSubmissionService {
             String solutionFileName = task.getLanguage().getSolutionFileName();
 
             boolean isFirstAttempt = submission.getGitlabProjectId() == null;
+            String commitSha;
 
             if (isFirstAttempt) {
                 Integer groupId = gitLabApiClient.getOrCreateGroup();
-                Integer projectId = gitLabApiClient.createProject(assignmentId, studentId, groupId);
-                submission.assignGitlabProject(projectId.longValue());
+                Integer newProjectId = gitLabApiClient.createProject(assignmentId, studentId, groupId);
+                submission.assignGitlabProject(newProjectId.longValue());
 
-                gitLabApiClient.pushFile(projectId, solutionFileName,
-                        attempt.getCodeContent(), "Add student solution");
-
-                gitLabApiClient.pushFile(projectId, "test.cpp",
-                        task.getTestFileContent(), "Add teacher test file");
-
-                gitLabApiClient.pushFile(projectId, ".gitlab-ci.yml", ciYaml, "Add CI config");
+                commitSha = gitLabApiClient.commitFiles(newProjectId,
+                        "Initial submission (attempt %d)".formatted(attempt.getAttemptNumber()),
+                        List.of(
+                                new FileAction("create", solutionFileName, attempt.getCodeContent()),
+                                new FileAction("create", "test.cpp", task.getTestFileContent()),
+                                new FileAction("create", ".gitlab-ci.yml", ciYaml)
+                        ));
 
                 String webhookUrl = properties.webhookBaseUrl() + "/api/webhooks/gitlab";
-                gitLabApiClient.registerWebhook(projectId, webhookUrl);
+                gitLabApiClient.registerWebhook(newProjectId, webhookUrl);
             } else {
-                Integer projectId = submission.getGitlabProjectId().intValue();
+                Integer existingProjectId = submission.getGitlabProjectId().intValue();
 
-                gitLabApiClient.updateFile(projectId, solutionFileName,
-                        attempt.getCodeContent(),
-                        "Update student solution (attempt %d)".formatted(attempt.getAttemptNumber()));
-
-                gitLabApiClient.updateFile(projectId, "test.cpp",
-                        task.getTestFileContent(),
-                        "Update teacher test file (attempt %d)".formatted(attempt.getAttemptNumber()));
-
-                gitLabApiClient.updateFile(projectId, ".gitlab-ci.yml", ciYaml,
-                        "Update CI config (attempt %d)".formatted(attempt.getAttemptNumber()));
+                commitSha = gitLabApiClient.commitFiles(existingProjectId,
+                        "Attempt %d".formatted(attempt.getAttemptNumber()),
+                        List.of(
+                                new FileAction("update", solutionFileName, attempt.getCodeContent()),
+                                new FileAction("update", "test.cpp", task.getTestFileContent()),
+                                new FileAction("update", ".gitlab-ci.yml", ciYaml)
+                        ));
             }
 
             Integer projectId = submission.getGitlabProjectId().intValue();
-            GitLabPipelineDto pipeline = gitLabApiClient.getLatestPipeline(projectId);
+            GitLabPipelineDto pipeline = gitLabApiClient.getPipelineForSha(projectId, commitSha);
 
             attempt.startPipeline(pipeline.id().longValue());
             log.info("Pipeline triggered: project={}, pipeline={}, attempt={}",

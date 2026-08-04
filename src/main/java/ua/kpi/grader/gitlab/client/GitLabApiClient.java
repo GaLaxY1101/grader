@@ -5,12 +5,10 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
-import org.springframework.web.util.UriUtils;
 import ua.kpi.grader.gitlab.client.dto.GitLabJobDto;
 import ua.kpi.grader.gitlab.client.dto.GitLabPipelineDto;
 import ua.kpi.grader.gitlab.config.GitLabProperties;
 
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
@@ -107,7 +105,8 @@ public class GitLabApiClient {
                 "path", name,
                 "namespace_id", groupId,
                 "visibility", "private",
-                "initialize_with_readme", false
+                "initialize_with_readme", false,
+                "default_branch", "main"
         );
         Map<String, Object> created = restClient.post()
                 .uri("/projects")
@@ -123,53 +122,48 @@ public class GitLabApiClient {
     // ── Files ─────────────────────────────────────────────────
 
     /**
-     * Push a single file to a GitLab project repository via the Files API.
-     * The file path is URL-encoded to handle slashes (e.g. src/main.c → src%2Fmain.c).
-     *
-     * @param projectId     the GitLab project id
-     * @param filePath      relative path inside the repo (e.g. "solution.c")
-     * @param content       raw file content
-     * @param commitMessage commit message
+     * A single file action within an atomic commit.
+     * Action must be one of GitLab's supported values: "create", "update", "delete", "move", "chmod".
      */
-    public void pushFile(Integer projectId, String filePath, String content, String commitMessage) {
-        String encodedPath = UriUtils.encodePathSegment(filePath, StandardCharsets.UTF_8);
-        log.debug("Pushing file '{}' to project id={}", filePath, projectId);
-
-        Map<String, Object> body = Map.of(
-                "branch", "main",
-                "content", content,
-                "commit_message", commitMessage
-        );
-        restClient.post()
-                .uri("/projects/{projectId}/repository/files/{filePath}", projectId, encodedPath)
-                .body(body)
-                .retrieve()
-                .toBodilessEntity();
-    }
+    public record FileAction(String action, String filePath, String content) {}
 
     /**
-     * Update an existing file in a GitLab project repository via the Files API (PUT).
-     * Used for subsequent attempts where the file already exists from the first push.
+     * Commit multiple file changes in a single atomic commit via the Commits API.
+     * This produces exactly one pipeline trigger regardless of how many files change,
+     * avoiding the auto-cancel race that occurs when files are pushed one-at-a-time.
      *
      * @param projectId     the GitLab project id
-     * @param filePath      relative path inside the repo (e.g. "solution.c")
-     * @param content       raw file content
      * @param commitMessage commit message
+     * @param actions       list of file actions to include in the commit
+     * @return the SHA of the created commit
      */
-    public void updateFile(Integer projectId, String filePath, String content, String commitMessage) {
-        String encodedPath = UriUtils.encodePathSegment(filePath, StandardCharsets.UTF_8);
-        log.debug("Updating file '{}' in project id={}", filePath, projectId);
+    public String commitFiles(Integer projectId, String commitMessage, List<FileAction> actions) {
+        log.debug("Committing {} file action(s) to project id={}", actions.size(), projectId);
+
+        List<Map<String, String>> actionBodies = actions.stream()
+                .map(a -> Map.of(
+                        "action", a.action(),
+                        "file_path", a.filePath(),
+                        "content", a.content()))
+                .toList();
 
         Map<String, Object> body = Map.of(
                 "branch", "main",
-                "content", content,
-                "commit_message", commitMessage
+                "commit_message", commitMessage,
+                "actions", actionBodies
         );
-        restClient.put()
-                .uri("/projects/{projectId}/repository/files/{filePath}", projectId, encodedPath)
+        Map<String, Object> response = restClient.post()
+                .uri("/projects/{projectId}/repository/commits", projectId)
                 .body(body)
                 .retrieve()
-                .toBodilessEntity();
+                .body(new ParameterizedTypeReference<>() {});
+
+        String sha = response != null ? (String) response.get("id") : null;
+        if (sha == null) {
+            throw new IllegalStateException("GitLab commit response missing 'id' for project " + projectId);
+        }
+        log.debug("Created commit {} in project id={}", sha, projectId);
+        return sha;
     }
 
     // ── Webhooks ──────────────────────────────────────────────
@@ -201,35 +195,45 @@ public class GitLabApiClient {
     // ── Pipelines ─────────────────────────────────────────────
 
     /**
-     * Fetch the most recently created pipeline for a project.
-     * Retries up to 5 times with 1-second pauses — GitLab may take a moment
-     * to queue the pipeline after the .gitlab-ci.yml push.
+     * Fetch the pipeline created for a specific commit SHA.
+     * Retries up to 15 times with 2-second pauses — GitLab may take a while
+     * to queue the pipeline after the commit, especially on cold instances.
+     * Filtering by SHA guarantees we return the pipeline for our commit and
+     * not a stale one from a prior attempt.
      *
      * @param projectId the GitLab project id
-     * @return the latest pipeline DTO
+     * @param sha       the commit SHA to match
+     * @return the pipeline DTO for the given SHA
      * @throws IllegalStateException if no pipeline appears after all attempts
      */
-    public GitLabPipelineDto getLatestPipeline(Integer projectId) {
-        for (int attempt = 1; attempt <= 5; attempt++) {
-            log.debug("Fetching latest pipeline for project id={} (attempt {}/5)", projectId, attempt);
+    public GitLabPipelineDto getPipelineForSha(Integer projectId, String sha) {
+        int maxAttempts = 15;
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            log.debug("Fetching pipeline for project id={} sha={} (attempt {}/{})",
+                    projectId, sha, attempt, maxAttempts);
             List<GitLabPipelineDto> pipelines = restClient.get()
-                    .uri("/projects/{projectId}/pipelines?per_page=1&order_by=id&sort=desc", projectId)
+                    .uri("/projects/{projectId}/pipelines?sha={sha}&per_page=1&order_by=id&sort=desc",
+                            projectId, sha)
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
             if (pipelines != null && !pipelines.isEmpty()) {
+                log.debug("Pipeline appeared for project id={} sha={} on attempt {}",
+                        projectId, sha, attempt);
                 return pipelines.getFirst();
             }
-            if (attempt < 5) {
-                log.debug("No pipeline yet for project id={}, waiting 1s before retry", projectId);
+            if (attempt < maxAttempts) {
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(2000);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    throw new IllegalStateException("Interrupted while waiting for pipeline on project " + projectId);
+                    throw new IllegalStateException(
+                            "Interrupted while waiting for pipeline on project " + projectId);
                 }
             }
         }
-        throw new IllegalStateException("No pipeline found for project " + projectId + " after 5 attempts");
+        throw new IllegalStateException(
+                "No pipeline found for project " + projectId + " sha " + sha + " after "
+                        + maxAttempts + " attempts (30s). Check .gitlab-ci.yml validity.");
     }
 
     /**
