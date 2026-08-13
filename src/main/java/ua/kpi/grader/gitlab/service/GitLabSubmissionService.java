@@ -47,8 +47,9 @@ public class GitLabSubmissionService {
                     .orElseThrow(() -> new IllegalStateException(
                             "No programming task found for assignment " + assignmentId));
 
-            String ciYaml = ciConfigService.generateCiConfig(task.getCiConfigTemplate());
+            String ciYaml = ciConfigService.generateCiConfig(task.getCiConfigTemplate(), task.getLanguage());
             String solutionFileName = task.getLanguage().getSolutionFileName();
+            String testFileName = task.getLanguage().getTestFileName();
 
             boolean isFirstAttempt = submission.getGitlabProjectId() == null;
             String commitSha;
@@ -62,7 +63,7 @@ public class GitLabSubmissionService {
                         "Initial submission (attempt %d)".formatted(attempt.getAttemptNumber()),
                         List.of(
                                 new FileAction("create", solutionFileName, attempt.getCodeContent()),
-                                new FileAction("create", "test.cpp", task.getTestFileContent()),
+                                new FileAction("create", testFileName, task.getTestFileContent()),
                                 new FileAction("create", ".gitlab-ci.yml", ciYaml)
                         ));
 
@@ -75,7 +76,7 @@ public class GitLabSubmissionService {
                         "Attempt %d".formatted(attempt.getAttemptNumber()),
                         List.of(
                                 new FileAction("update", solutionFileName, attempt.getCodeContent()),
-                                new FileAction("update", "test.cpp", task.getTestFileContent()),
+                                new FileAction("update", testFileName, task.getTestFileContent()),
                                 new FileAction("update", ".gitlab-ci.yml", ciYaml)
                         ));
             }

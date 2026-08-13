@@ -27,12 +27,15 @@ public class CompilationController {
     @PostMapping("/api/compile/validate")
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public ResponseEntity<CompileResponse> validateCompilation(@Valid @RequestBody CompileRequest request) {
+        if (request.language() == null) {
+            throw new IllegalArgumentException("language is required");
+        }
         CompilationResult result;
         if (request.testFileContent() != null && !request.testFileContent().isBlank()) {
             result = compilationService.compileSolutionWithTests(
-                    request.solutionCode(), request.testFileContent());
+                    request.solutionCode(), request.testFileContent(), request.language());
         } else {
-            result = compilationService.compileSolution(request.solutionCode());
+            result = compilationService.compileSolution(request.solutionCode(), request.language());
         }
         return ResponseEntity.ok(new CompileResponse(result.success(), result.output()));
     }
@@ -51,7 +54,7 @@ public class CompilationController {
                         "Programming task not found for assignment " + assignmentId));
 
         CompilationResult result = compilationService.compileSolutionWithTests(
-                request.solutionCode(), task.getTestFileContent());
+                request.solutionCode(), task.getTestFileContent(), task.getLanguage());
         return ResponseEntity.ok(new CompileResponse(result.success(), result.output()));
     }
 }

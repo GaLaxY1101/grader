@@ -2,7 +2,6 @@ package ua.kpi.grader.template.mapper;
 
 import org.springframework.stereotype.Component;
 import ua.kpi.grader.course.dto.ProgrammingTaskDetails;
-import ua.kpi.grader.course.entity.Language;
 import ua.kpi.grader.course.entity.TestMode;
 import ua.kpi.grader.template.entity.CourseTemplate;
 import ua.kpi.grader.template.entity.TemplateAssignment;
@@ -81,8 +80,8 @@ public class TemplateContentMapper {
         if (details.functionSignature() == null || details.functionSignature().isBlank()) {
             throw new IllegalArgumentException("Function signature is required for programming tasks");
         }
-        if (details.language() != Language.CPP) {
-            throw new IllegalArgumentException("Unit test mode is only supported for C++");
+        if (details.language() == null) {
+            throw new IllegalArgumentException("Language is required for programming tasks");
         }
         if (details.testFileContent() == null || details.testFileContent().isBlank()) {
             throw new IllegalArgumentException("Test file content is required for unit test mode");

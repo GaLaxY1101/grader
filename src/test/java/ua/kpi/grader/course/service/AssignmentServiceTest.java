@@ -210,6 +210,26 @@ class AssignmentServiceTest {
     }
 
     @Test
+    void updateAssignment_addsCodeCheck_forPythonLanguage() {
+        Course course = buildCourse(1L);
+        Teacher teacher = buildTeacher(1L, 10L);
+        Assignment assignment = buildAssignment(5L, course, teacher);
+
+        ProgrammingTaskDetails details = new ProgrammingTaskDetails(
+                Language.PYTHON, TestMode.UNIT_TEST, null,
+                "def solve(x):\n    pass",
+                "from solution import solve\n\ndef test_ok():\n    assert True\n");
+        UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, details);
+        when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
+
+        AssignmentResponse result = assignmentService.updateAssignment(5L, request);
+
+        assertThat(assignment.getProgrammingTask()).isNotNull();
+        assertThat(assignment.getProgrammingTask().getLanguage()).isEqualTo(Language.PYTHON);
+        assertThat(result.programmingTask()).isNotNull();
+    }
+
+    @Test
     void updateAssignment_leavesCodeCheckUntouched_whenBothNull() {
         Course course = buildCourse(1L);
         Teacher teacher = buildTeacher(1L, 10L);
