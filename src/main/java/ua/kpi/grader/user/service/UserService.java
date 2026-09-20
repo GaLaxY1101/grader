@@ -90,6 +90,7 @@ public class UserService {
                 .phone(request.phone())
                 .dateOfBirth(request.dateOfBirth())
                 .role(request.role())
+                .keycloakId(keycloakUserId)
                 .build();
         return UserResponse.from(userRepository.save(user));
     }

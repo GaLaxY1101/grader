@@ -40,6 +40,9 @@ public class User {
     @Column(nullable = false, length = 20)
     private Role role;
 
+    @Column(name = "keycloak_id", length = 36, unique = true)
+    private String keycloakId;
+
     @Column(name = "is_active", nullable = false)
     @Builder.Default
     private boolean isActive = true;

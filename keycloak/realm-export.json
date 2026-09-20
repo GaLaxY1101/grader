@@ -8,6 +8,15 @@
   "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
+  "smtpServer": {
+    "host": "mailpit",
+    "port": "1025",
+    "from": "no-reply@grader.local",
+    "fromDisplayName": "University Grader",
+    "ssl": "false",
+    "starttls": "false",
+    "auth": "false"
+  },
   "roles": {
     "realm": [
       { "name": "STUDENT",  "description": "Student role",  "composite": false },

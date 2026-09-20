@@ -8,7 +8,9 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import ua.kpi.grader.common.dto.BulkImportErrorResponse;
 import ua.kpi.grader.common.dto.ErrorResponse;
+import ua.kpi.grader.common.dto.MissingColumnErrorResponse;
 
 import java.time.OffsetDateTime;
 import java.util.stream.Collectors;
@@ -75,5 +77,27 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ErrorResponse(400, "Bad Request", ex.getMessage(), OffsetDateTime.now()));
+    }
+
+    @ExceptionHandler(InvalidPhoneNumberException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidPhoneNumber(InvalidPhoneNumberException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(400, "Bad Request", ex.getMessage(), OffsetDateTime.now()));
+    }
+
+    @ExceptionHandler(MissingColumnException.class)
+    public ResponseEntity<MissingColumnErrorResponse> handleMissingColumn(MissingColumnException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new MissingColumnErrorResponse(
+                        400, "Bad Request", ex.getMessage(), OffsetDateTime.now(),
+                        ex.getMissingHeader(), ex.getDetectedHeaders()));
+    }
+
+    @ExceptionHandler(InvalidImportException.class)
+    public ResponseEntity<BulkImportErrorResponse> handleInvalidImport(InvalidImportException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new BulkImportErrorResponse(
+                        400, "Bad Request", ex.getMessage(), OffsetDateTime.now(),
+                        ex.getErrors()));
     }
 }

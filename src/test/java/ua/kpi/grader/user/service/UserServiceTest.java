@@ -2,11 +2,13 @@ package ua.kpi.grader.user.service;
 
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.keycloak.KeycloakAdminClient;
+import ua.kpi.grader.user.dto.CreateUserRequest;
 import ua.kpi.grader.user.entity.Role;
 import ua.kpi.grader.user.entity.User;
 import ua.kpi.grader.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -15,6 +17,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -70,6 +74,24 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.findById(99L))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("99");
+    }
+
+    // --- createUser ---
+
+    @Test
+    void createUser_persistsKeycloakUuid_returnedFromAdminClient() {
+        String kcUuid = "11111111-2222-3333-4444-555555555555";
+        when(userRepository.existsByEmail("new@example.com")).thenReturn(false);
+        when(keycloakAdminClient.createUser("new@example.com", "New", "User"))
+                .thenReturn(kcUuid);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        userService.createUser(new CreateUserRequest(
+                "new@example.com", "New", "User", null, null, Role.STUDENT));
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getKeycloakId()).isEqualTo(kcUuid);
     }
 
     // --- helpers ---
