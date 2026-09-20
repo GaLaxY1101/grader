@@ -1,8 +1,10 @@
 package ua.kpi.grader.group.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.group.dto.CreateGroupRequest;
 import ua.kpi.grader.group.dto.GroupResponse;
@@ -152,18 +154,22 @@ public class GroupService {
     }
 
     /**
-     * Returns all students belonging to a group.
+     * Returns students belonging to a group, filtered by a case-insensitive
+     * search over email/first name/last name, paginated.
      *
-     * @param groupId the group ID
-     * @return list of GroupStudentResponse DTOs
+     * @param groupId  the group ID
+     * @param query    raw search term ({@code null} or blank disables filtering)
+     * @param pageable paging &amp; sort
+     * @return paged GroupStudentResponse
      * @throws ResourceNotFoundException if no group exists with that ID
      */
     @Transactional(readOnly = true)
-    public List<GroupStudentResponse> findStudents(Long groupId) {
+    public PageResponse<GroupStudentResponse> findStudents(Long groupId, String query, Pageable pageable) {
         findGroupOrThrow(groupId);
-        return groupStudentRepository.findAllByGroupIdWithStudentUser(groupId).stream()
-                .map(GroupStudentResponse::from)
-                .toList();
+        String normalised = (query == null || query.isBlank()) ? null : query.trim().toLowerCase();
+        return PageResponse.from(
+                groupStudentRepository.searchByGroupId(groupId, normalised, pageable)
+                        .map(GroupStudentResponse::from));
     }
 
     private AcademicGroup findGroupOrThrow(Long id) {

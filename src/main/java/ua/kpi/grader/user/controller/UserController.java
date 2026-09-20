@@ -2,9 +2,14 @@ package ua.kpi.grader.user.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.user.dto.CreateUserRequest;
 import ua.kpi.grader.user.dto.UpdateUserRequest;
 import ua.kpi.grader.user.dto.UserResponse;
@@ -20,8 +25,16 @@ public class UserController {
     private final UserService userService;
 
     @GetMapping
-    public ResponseEntity<List<UserResponse>> listUsers() {
-        return ResponseEntity.ok(userService.findAll());
+    public ResponseEntity<PageResponse<UserResponse>> listUsers(
+            @RequestParam(required = false) String query,
+            @ParameterObject @PageableDefault(size = 20, sort = "createdAt",
+                    direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(userService.findAll(query, pageable));
+    }
+
+    @GetMapping("/emails")
+    public ResponseEntity<List<String>> listUserEmails() {
+        return ResponseEntity.ok(userService.findAllEmails());
     }
 
     @GetMapping("/{id}")

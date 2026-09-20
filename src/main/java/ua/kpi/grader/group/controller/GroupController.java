@@ -2,10 +2,15 @@ package ua.kpi.grader.group.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.group.dto.CreateGroupRequest;
 import ua.kpi.grader.group.dto.GroupResponse;
 import ua.kpi.grader.group.dto.GroupStudentResponse;
@@ -76,7 +81,11 @@ public class GroupController {
 
     @GetMapping("/{id}/students")
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
-    public ResponseEntity<List<GroupStudentResponse>> listStudents(@PathVariable Long id) {
-        return ResponseEntity.ok(groupService.findStudents(id));
+    public ResponseEntity<PageResponse<GroupStudentResponse>> listStudents(
+            @PathVariable Long id,
+            @RequestParam(required = false) String query,
+            @ParameterObject @PageableDefault(size = 20, sort = "id",
+                    direction = Sort.Direction.ASC) Pageable pageable) {
+        return ResponseEntity.ok(groupService.findStudents(id, query, pageable));
     }
 }

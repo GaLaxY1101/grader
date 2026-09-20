@@ -1,8 +1,10 @@
 package ua.kpi.grader.user.service;
 
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.keycloak.KeycloakAdminClient;
 import ua.kpi.grader.user.dto.CreateUserRequest;
+import ua.kpi.grader.user.dto.UserResponse;
 import ua.kpi.grader.user.entity.Role;
 import ua.kpi.grader.user.entity.User;
 import ua.kpi.grader.user.repository.UserRepository;
@@ -12,12 +14,17 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -74,6 +81,52 @@ class UserServiceTest {
         assertThatThrownBy(() -> userService.findById(99L))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("99");
+    }
+
+    // --- findAll ---
+
+    @Test
+    void findAll_paginatesAndMapsResults() {
+        User alice = buildUser("alice@example.com", Role.STUDENT);
+        alice.setId(1L);
+        when(userRepository.search(isNull(), any()))
+                .thenReturn(new PageImpl<>(List.of(alice)));
+
+        PageResponse<UserResponse> page =
+                userService.findAll(null, PageRequest.of(0, 20));
+
+        assertThat(page.content()).hasSize(1);
+        assertThat(page.content().get(0).email()).isEqualTo("alice@example.com");
+        assertThat(page.totalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void findAll_lowercasesAndTrimsQuery_beforePassingToRepo() {
+        when(userRepository.search(eq("bob"), any())).thenReturn(new PageImpl<>(List.of()));
+
+        userService.findAll("  BOB  ", PageRequest.of(0, 20));
+
+        verify(userRepository).search(eq("bob"), any());
+    }
+
+    @Test
+    void findAll_treatsBlankQueryAsNull() {
+        when(userRepository.search(isNull(), any())).thenReturn(new PageImpl<>(List.of()));
+
+        userService.findAll("   ", PageRequest.of(0, 20));
+
+        verify(userRepository).search(isNull(), any());
+    }
+
+    // --- findAllEmails ---
+
+    @Test
+    void findAllEmails_delegatesToRepository() {
+        when(userRepository.findAllEmails())
+                .thenReturn(List.of("a@example.com", "b@example.com"));
+
+        assertThat(userService.findAllEmails())
+                .containsExactly("a@example.com", "b@example.com");
     }
 
     // --- createUser ---

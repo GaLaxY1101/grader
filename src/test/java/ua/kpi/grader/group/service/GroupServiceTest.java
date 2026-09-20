@@ -5,6 +5,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.group.dto.CreateGroupRequest;
 import ua.kpi.grader.group.dto.GroupResponse;
@@ -26,6 +29,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -271,20 +276,33 @@ class GroupServiceTest {
                 .group(group).student(student)
                 .enrolledAt(OffsetDateTime.now()).build();
         when(groupRepository.findById(1L)).thenReturn(Optional.of(group));
-        when(groupStudentRepository.findAllByGroupIdWithStudentUser(1L))
-                .thenReturn(List.of(membership));
+        when(groupStudentRepository.searchByGroupId(eq(1L), isNull(), any()))
+                .thenReturn(new PageImpl<>(List.of(membership)));
 
-        List<GroupStudentResponse> result = groupService.findStudents(1L);
+        PageResponse<GroupStudentResponse> result =
+                groupService.findStudents(1L, null, PageRequest.of(0, 20));
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).email()).isEqualTo("bob@test.com");
+        assertThat(result.content()).hasSize(1);
+        assertThat(result.content().get(0).email()).isEqualTo("bob@test.com");
+        assertThat(result.totalElements()).isEqualTo(1);
+    }
+
+    @Test
+    void findStudents_appliesLowercaseNormalisation_whenQueryHasMixedCase() {
+        when(groupRepository.findById(1L)).thenReturn(Optional.of(buildGroup(1L, "CS-21", true)));
+        when(groupStudentRepository.searchByGroupId(eq(1L), eq("bob"), any()))
+                .thenReturn(new PageImpl<>(List.of()));
+
+        groupService.findStudents(1L, "  BOB  ", PageRequest.of(0, 20));
+
+        verify(groupStudentRepository).searchByGroupId(eq(1L), eq("bob"), any());
     }
 
     @Test
     void findStudents_throwsResourceNotFoundException_whenGroupNotFound() {
         when(groupRepository.findById(99L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> groupService.findStudents(99L))
+        assertThatThrownBy(() -> groupService.findStudents(99L, null, PageRequest.of(0, 20)))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("99");
     }

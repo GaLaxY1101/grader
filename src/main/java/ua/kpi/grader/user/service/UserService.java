@@ -1,8 +1,10 @@
 package ua.kpi.grader.user.service;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ua.kpi.grader.common.dto.PageResponse;
 import ua.kpi.grader.common.exception.DuplicateEmailException;
 import ua.kpi.grader.common.exception.KeycloakIntegrationException;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
@@ -49,15 +51,28 @@ public class UserService {
     }
 
     /**
-     * Returns all users as response DTOs.
+     * Returns users filtered by a case-insensitive search term matched against
+     * email, first name or last name, paginated.
      *
-     * @return list of UserResponse DTOs
+     * @param query    raw search term ({@code null} or blank disables filtering)
+     * @param pageable paging &amp; sort
+     * @return paged UserResponse
      */
     @Transactional(readOnly = true)
-    public List<UserResponse> findAll() {
-        return userRepository.findAll().stream()
-                .map(UserResponse::from)
-                .toList();
+    public PageResponse<UserResponse> findAll(String query, Pageable pageable) {
+        String normalised = (query == null || query.isBlank()) ? null : query.trim().toLowerCase();
+        return PageResponse.from(
+                userRepository.search(normalised, pageable).map(UserResponse::from));
+    }
+
+    /**
+     * Returns every registered user email — used by the bulk-import
+     * "already registered" guard on the frontend. Non-paginated on purpose:
+     * the caller needs the full set to build a client-side Set.
+     */
+    @Transactional(readOnly = true)
+    public List<String> findAllEmails() {
+        return userRepository.findAllEmails();
     }
 
     /**
