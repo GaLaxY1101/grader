@@ -1,6 +1,7 @@
 package ua.kpi.grader.template.dto;
 
 import ua.kpi.grader.course.dto.ProgrammingTaskDetails;
+import ua.kpi.grader.course.entity.AssignmentType;
 import ua.kpi.grader.template.entity.TemplateAssignment;
 import ua.kpi.grader.template.entity.TemplateProgrammingTask;
 
@@ -12,9 +13,11 @@ public record TemplateAssignmentResponse(
         String title,
         String description,
         Integer maxScore,
+        AssignmentType type,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
-        ProgrammingTaskDetails programmingTask
+        ProgrammingTaskDetails programmingTask,
+        int attachmentCount
 ) {
     public static TemplateAssignmentResponse from(TemplateAssignment assignment) {
         return new TemplateAssignmentResponse(
@@ -23,9 +26,11 @@ public record TemplateAssignmentResponse(
                 assignment.getTitle(),
                 assignment.getDescription(),
                 assignment.getMaxScore(),
+                assignment.getType(),
                 assignment.getCreatedAt(),
                 assignment.getUpdatedAt(),
-                toProgrammingTaskDetails(assignment.getProgrammingTask())
+                toProgrammingTaskDetails(assignment.getProgrammingTask()),
+                assignment.getAttachments() != null ? assignment.getAttachments().size() : 0
         );
     }
 

@@ -68,7 +68,7 @@ class TemplateAssignmentServiceTest {
         });
 
         TemplateAssignmentResponse result = service.createAssignment(1L,
-                new CreateTemplateAssignmentRequest("Title", "d", null, null));
+                new CreateTemplateAssignmentRequest("Title", "d", null, null, null));
 
         assertThat(result.id()).isEqualTo(55L);
         assertThat(result.maxScore()).isEqualTo(100);
@@ -79,7 +79,7 @@ class TemplateAssignmentServiceTest {
         when(assignmentRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updateAssignment(99L,
-                new UpdateTemplateAssignmentRequest("t", null, 100, null)))
+                new UpdateTemplateAssignmentRequest("t", null, 100, null, null)))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
@@ -97,7 +97,7 @@ class TemplateAssignmentServiceTest {
         when(access.requireEdit(1L)).thenReturn(template);
 
         service.updateAssignment(10L,
-                new UpdateTemplateAssignmentRequest("Renamed", null, 100, null));
+                new UpdateTemplateAssignmentRequest("Renamed", null, 100, null, null));
 
         assertThat(a.getProgrammingTask()).isNull();
     }

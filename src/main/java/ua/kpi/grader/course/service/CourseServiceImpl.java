@@ -25,6 +25,7 @@ import ua.kpi.grader.user.repository.StudentRepository;
 import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.template.entity.CourseTemplate;
 import ua.kpi.grader.template.entity.TemplateAssignment;
+import ua.kpi.grader.template.mapper.TemplateAttachmentCopier;
 import ua.kpi.grader.template.mapper.TemplateToCourseMapper;
 import ua.kpi.grader.template.repository.TemplateAssignmentRepository;
 import ua.kpi.grader.template.service.TemplateAccessService;
@@ -52,6 +53,7 @@ public class CourseServiceImpl implements CourseService {
     private final TemplateAccessService templateAccess;
     private final TemplateAssignmentRepository templateAssignmentRepository;
     private final TemplateToCourseMapper templateToCourseMapper;
+    private final TemplateAttachmentCopier templateAttachmentCopier;
 
     /**
      * Returns a page of courses filtered by active/inactive status. A non-blank
@@ -149,7 +151,8 @@ public class CourseServiceImpl implements CourseService {
     private void instantiateFromTemplate(Course course, Teacher createdBy, Long templateId) {
         CourseTemplate template = templateAccess.requireView(templateId);
         for (TemplateAssignment src : templateAssignmentRepository.findAllByTemplateId(template.getId())) {
-            assignmentRepository.save(templateToCourseMapper.toAssignment(src, course, createdBy));
+            var saved = assignmentRepository.save(templateToCourseMapper.toAssignment(src, course, createdBy));
+            templateAttachmentCopier.copyAll(src, saved, createdBy);
         }
     }
 

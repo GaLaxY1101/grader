@@ -62,6 +62,9 @@ class SubmissionServiceTest {
     @Mock
     private GitLabApiClient gitLabApiClient;
 
+    @Mock
+    private SubmissionAccess submissionAccess;
+
     @InjectMocks
     private SubmissionServiceImpl submissionService;
 
@@ -76,10 +79,9 @@ class SubmissionServiceTest {
         when(currentUser.getEmail()).thenReturn(STUDENT_EMAIL);
         when(assignmentRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(assignment));
         when(studentRepository.findByUser_Email(STUDENT_EMAIL)).thenReturn(Optional.of(student));
-        when(submissionRepository.findByAssignmentIdAndStudentId(1L, 1L)).thenReturn(Optional.empty());
 
         Submission savedSubmission = buildSubmission(1L, assignment, student);
-        when(submissionRepository.save(any(Submission.class))).thenReturn(savedSubmission);
+        when(submissionAccess.getOrCreate(assignment, student)).thenReturn(savedSubmission);
         when(attemptRepository.findMaxAttemptNumber(1L)).thenReturn(0);
 
         Attempt savedAttempt = buildAttempt(1L, savedSubmission, 1, "public class Main {}");
@@ -91,7 +93,7 @@ class SubmissionServiceTest {
         assertThat(response.id()).isEqualTo(1L);
         assertThat(response.attemptNumber()).isEqualTo(1);
         assertThat(response.status()).isEqualTo(SubmissionStatus.PENDING);
-        verify(submissionRepository).save(any(Submission.class));
+        verify(submissionAccess).getOrCreate(assignment, student);
         verify(attemptRepository).save(any(Attempt.class));
         verify(gitLabSubmissionService).triggerPipeline(eq(savedSubmission), eq(savedAttempt));
     }
@@ -104,8 +106,7 @@ class SubmissionServiceTest {
         when(currentUser.getEmail()).thenReturn(STUDENT_EMAIL);
         when(assignmentRepository.findByIdAndIsActiveTrue(1L)).thenReturn(Optional.of(assignment));
         when(studentRepository.findByUser_Email(STUDENT_EMAIL)).thenReturn(Optional.of(student));
-        when(submissionRepository.findByAssignmentIdAndStudentId(1L, 1L))
-                .thenReturn(Optional.of(existingSubmission));
+        when(submissionAccess.getOrCreate(assignment, student)).thenReturn(existingSubmission);
         when(attemptRepository.findMaxAttemptNumber(1L)).thenReturn(1);
 
         Attempt savedAttempt = buildAttempt(2L, existingSubmission, 2, "updated code");
@@ -115,7 +116,7 @@ class SubmissionServiceTest {
                 new CreateSubmissionRequest("updated code"));
 
         assertThat(response.attemptNumber()).isEqualTo(2);
-        verify(submissionRepository, never()).save(any(Submission.class));
+        verify(submissionAccess).getOrCreate(assignment, student);
         verify(gitLabSubmissionService).triggerPipeline(eq(existingSubmission), eq(savedAttempt));
     }
 

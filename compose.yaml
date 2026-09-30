@@ -67,11 +67,22 @@ services:
     depends_on:
       - gitlab
 
+  s3mock:
+    image: 'adobe/s3mock:latest'
+    environment:
+      - 'initialBuckets=grader-attachments'
+      - 'retainFilesOnExit=true'
+    ports:
+      - '9000:9090'
+    volumes:
+      - minio_data:/s3mockroot
+
 volumes:
   gitlab_config:
   gitlab_logs:
   gitlab_data:
   gitlab_runner_config:
+  minio_data:
 
 networks:
   grader-network:

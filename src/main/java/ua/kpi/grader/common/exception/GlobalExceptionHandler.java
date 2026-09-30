@@ -8,6 +8,7 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import ua.kpi.grader.common.dto.BulkImportErrorResponse;
 import ua.kpi.grader.common.dto.ErrorResponse;
 import ua.kpi.grader.common.dto.MissingColumnErrorResponse;
@@ -99,5 +100,16 @@ public class GlobalExceptionHandler {
                 .body(new BulkImportErrorResponse(
                         400, "Bad Request", ex.getMessage(), OffsetDateTime.now(),
                         ex.getErrors()));
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatus(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        String detail = ex.getReason() != null ? ex.getReason() : status.getReasonPhrase();
+        return ResponseEntity.status(status)
+                .body(new ErrorResponse(status.value(), status.getReasonPhrase(), detail, OffsetDateTime.now()));
     }
 }

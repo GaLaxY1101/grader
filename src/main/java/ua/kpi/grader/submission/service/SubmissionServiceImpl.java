@@ -36,6 +36,7 @@ public class SubmissionServiceImpl implements SubmissionService {
     private final CurrentUser currentUser;
     private final GitLabSubmissionService gitLabSubmissionService;
     private final GitLabApiClient gitLabApiClient;
+    private final SubmissionAccess submissionAccess;
 
     /**
      * Creates a new attempt for the given assignment on behalf of the authenticated student.
@@ -53,15 +54,7 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Student not found for user: " + email));
 
-        Submission submission = submissionRepository
-                .findByAssignmentIdAndStudentId(assignmentId, student.getId())
-                .orElseGet(() -> {
-                    Submission newSub = Submission.builder()
-                            .assignment(assignment)
-                            .student(student)
-                            .build();
-                    return submissionRepository.save(newSub);
-                });
+        Submission submission = submissionAccess.getOrCreate(assignment, student);
 
         int nextNumber = attemptRepository.findMaxAttemptNumber(submission.getId()) + 1;
         Attempt attempt = Attempt.builder()
@@ -220,6 +213,9 @@ public class SubmissionServiceImpl implements SubmissionService {
             }
         }
         submission.assignGrade(newGrade);
+        if (newGrade != null && submission.getAssignment().getType().supportsFiles()) {
+            submission.markGradedIfFileWorkflow();
+        }
         return SubmissionResponse.from(submission);
     }
 

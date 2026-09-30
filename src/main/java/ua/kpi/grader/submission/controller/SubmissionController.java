@@ -3,12 +3,19 @@ package ua.kpi.grader.submission.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import ua.kpi.grader.storage.dto.DownloadUrl;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import ua.kpi.grader.storage.dto.AttachmentSummary;
 import ua.kpi.grader.submission.dto.*;
+import ua.kpi.grader.submission.service.SubmissionAttachmentService;
+import ua.kpi.grader.submission.service.SubmissionAttachmentService.SubmissionUploadResult;
 import ua.kpi.grader.submission.service.SubmissionService;
 
+import java.net.URI;
 import java.util.List;
 
 @RestController
@@ -16,6 +23,7 @@ import java.util.List;
 public class SubmissionController {
 
     private final SubmissionService submissionService;
+    private final SubmissionAttachmentService attachmentService;
 
     @PostMapping("/api/assignments/{assignmentId}/submissions")
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
@@ -77,5 +85,54 @@ public class SubmissionController {
             @PathVariable Long id,
             @RequestBody @Valid UpdateGradeRequest request) {
         return ResponseEntity.ok(submissionService.updateGrade(id, request));
+    }
+
+    @PostMapping(
+            path = "/api/assignments/{assignmentId}/submissions/attachments",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<SubmissionUploadResult> uploadSubmissionAttachments(
+            @PathVariable Long assignmentId,
+            @RequestPart("files") List<MultipartFile> files) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(attachmentService.upload(assignmentId, files));
+    }
+
+    @GetMapping("/api/submissions/{id}/attachments")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
+    public ResponseEntity<List<AttachmentSummary>> listSubmissionAttachments(@PathVariable Long id) {
+        return ResponseEntity.ok(attachmentService.list(id));
+    }
+
+    @DeleteMapping("/api/submissions/{id}/attachments/{attachmentId}")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<Void> deleteSubmissionAttachment(
+            @PathVariable Long id,
+            @PathVariable Long attachmentId) {
+        attachmentService.delete(id, attachmentId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/api/submissions/{id}/attachments/{attachmentId}/download")
+    @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
+    public ResponseEntity<DownloadUrl> downloadSubmissionAttachment(
+            @PathVariable Long id,
+            @PathVariable Long attachmentId) {
+        URI presigned = attachmentService.download(id, attachmentId);
+        return ResponseEntity.ok(new DownloadUrl(presigned.toString()));
+    }
+
+    @PostMapping("/api/submissions/{id}/turn-in")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<SubmissionResponse> turnIn(@PathVariable Long id) {
+        return ResponseEntity.ok(attachmentService.turnIn(id));
+    }
+
+    @PostMapping("/api/submissions/{id}/return")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public ResponseEntity<SubmissionResponse> returnSubmission(
+            @PathVariable Long id,
+            @RequestBody(required = false) @Valid ReturnSubmissionRequest request) {
+        return ResponseEntity.ok(attachmentService.returnSubmission(id, request));
     }
 }

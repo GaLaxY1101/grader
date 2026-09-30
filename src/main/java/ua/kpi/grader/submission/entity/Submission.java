@@ -62,6 +62,23 @@ public class Submission {
     @Builder.Default
     private List<Attempt> attempts = new ArrayList<>();
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "file_state", length = 20)
+    private SubmissionFileState fileState;
+
+    @Column(name = "return_comment", columnDefinition = "TEXT")
+    private String returnComment;
+
+    @Column(name = "returned_at")
+    private OffsetDateTime returnedAt;
+
+    @Column(name = "submitted_at")
+    private OffsetDateTime submittedAt;
+
+    @OneToMany(mappedBy = "submission", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<SubmissionAttachment> attachments = new ArrayList<>();
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -110,5 +127,65 @@ public class Submission {
      */
     public void assignGrade(Integer newGrade) {
         this.grade = newGrade;
+    }
+
+    /**
+     * Initialises the file workflow state on first student upload for a file-bearing assignment.
+     * No-op if the state is already set.
+     */
+    public void initFileStateIfNeeded() {
+        if (this.fileState == null) {
+            this.fileState = SubmissionFileState.DRAFT;
+        }
+    }
+
+    /**
+     * Transitions the file workflow from DRAFT or RETURNED into SUBMITTED and records the timestamp.
+     *
+     * @throws IllegalStateException if the current state does not permit turn-in
+     */
+    public void turnIn() {
+        if (this.fileState != SubmissionFileState.DRAFT && this.fileState != SubmissionFileState.RETURNED) {
+            throw new IllegalStateException("Cannot turn in submission in state " + this.fileState);
+        }
+        this.fileState = SubmissionFileState.SUBMITTED;
+        this.submittedAt = OffsetDateTime.now();
+    }
+
+    /**
+     * Teacher returns the submission for redo. Preserves any tentative grade (Google Classroom parity).
+     *
+     * @throws IllegalStateException if the submission is not currently SUBMITTED
+     */
+    public void markReturned(String comment) {
+        if (this.fileState != SubmissionFileState.SUBMITTED) {
+            throw new IllegalStateException("Cannot return submission in state " + this.fileState);
+        }
+        this.fileState = SubmissionFileState.RETURNED;
+        this.returnComment = comment;
+        this.returnedAt = OffsetDateTime.now();
+    }
+
+    /**
+     * Flips file workflow to GRADED after a teacher grade assignment, if a file workflow is in progress.
+     */
+    public void markGradedIfFileWorkflow() {
+        if (this.fileState == SubmissionFileState.SUBMITTED || this.fileState == SubmissionFileState.RETURNED) {
+            this.fileState = SubmissionFileState.GRADED;
+        }
+    }
+
+    /**
+     * Adds a new attachment while maintaining the bidirectional association.
+     */
+    public void addAttachment(SubmissionAttachment attachment) {
+        this.attachments.add(attachment);
+    }
+
+    /**
+     * Removes an attachment, breaking the association so orphanRemoval deletes it.
+     */
+    public void removeAttachment(SubmissionAttachment attachment) {
+        this.attachments.remove(attachment);
     }
 }

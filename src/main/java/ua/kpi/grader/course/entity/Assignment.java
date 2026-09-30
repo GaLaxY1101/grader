@@ -7,6 +7,8 @@ import org.hibernate.annotations.UpdateTimestamp;
 import ua.kpi.grader.user.entity.Teacher;
 
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "assignments")
@@ -42,6 +44,11 @@ public class Assignment {
     @Builder.Default
     private boolean isActive = true;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private AssignmentType type = AssignmentType.CODE;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false,
             foreignKey = @ForeignKey(name = "fk_assignments_teachers"))
@@ -50,6 +57,10 @@ public class Assignment {
     @Setter
     @OneToOne(mappedBy = "assignment", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private ProgrammingTask programmingTask;
+
+    @OneToMany(mappedBy = "assignment", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<AssignmentAttachment> attachments = new ArrayList<>();
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
@@ -74,5 +85,19 @@ public class Assignment {
      */
     public void deactivate() {
         this.isActive = false;
+    }
+
+    /**
+     * Adds a teacher-uploaded attachment while maintaining the bidirectional association.
+     */
+    public void addAttachment(AssignmentAttachment attachment) {
+        this.attachments.add(attachment);
+    }
+
+    /**
+     * Removes an attachment, breaking the association so orphanRemoval deletes it.
+     */
+    public void removeAttachment(AssignmentAttachment attachment) {
+        this.attachments.remove(attachment);
     }
 }
