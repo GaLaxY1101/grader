@@ -41,7 +41,8 @@ public record TemplateAssignmentResponse(
                 task.getTestMode(),
                 task.getCiConfigTemplate(),
                 task.getFunctionSignature(),
-                task.getTestFileContent()
+                task.getTestFileContent(),
+                null
         );
     }
 }

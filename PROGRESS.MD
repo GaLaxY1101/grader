@@ -139,6 +139,44 @@ Tables created so far:
 - [x] Submission status page with usePolling (3 s interval, stops on terminal status)
 - [x] SubmissionStatusBadge, SubmissionForm, SubmissionList, usePolling hook
 
+### AI Test Gen — Phase 0: Environment setup ✅
+- [x] GPU: RTX 3060 Laptop, 6 GB VRAM → model `qwen2.5-coder:3b`
+- [x] Sandbox images `grader/sandbox/` (`cpp/Dockerfile`, `python/Dockerfile`, `build.sh`, `build.ps1`)
+  - `grader-sandbox-cpp:1` (gcc:13 + gcovr 5.2), `grader-sandbox-py:1` (python:3.12-slim + pytest, pytest-cov)
+  - Verified with `--network none`: passing sample exits 0, failing sample exits 1 (both languages)
+- [x] `testgen.*` block in application.yml; `./mvnw -q compile` passes
+- [x] "AI Test Generation" section in CLAUDE.MD
+- [x] Ollama 0.35.0 installed, `qwen2.5-coder:3b` pulled (1.9 GB, runs 100% on GPU, default context 4096)
+- [x] Smoke test `POST /api/chat` (pytest for `add(a, b)`): cold 93 s (model load 40 s), warm 1.1 s (~119 tok/s);
+  generated 5 tests, all pass in `grader-sandbox-py:1`
+
+### AI Test Gen — Phase 1A: Backend foundation ✅
+- [x] V26 `reference_solution` on `programming_tasks`; `ProgrammingTask.update(...)` + `ProgrammingTaskDetails.referenceSolution`
+  (nested in Create/UpdateAssignmentRequest, so no separate top-level field)
+- [x] Reference solution hidden from students: `AssignmentResponse.from(a, includeReferenceSolution)` with
+  `CurrentUser.isStaff()` in AssignmentServiceImpl + CourseServiceImpl; template DTOs always return null
+- [x] V27 `test_generation_jobs` (config JSONB) + `test_generation_iterations`; entities, `JobStatus`, `PromptType`, repositories
+- [x] `TestGenProperties` (`testgen.*`, plus `ollama.keep-alive`, `ollama.num-ctx`)
+- [x] `OllamaClient.chat(...)` (RestClient, keep_alive/num_ctx/seed), `extractCode`, `LlmUnavailableException` → 503
+- [x] `SandboxRunner.run/runWithCoverage` (single container run with phase markers, timeout + `docker kill`,
+  hardening flags, pytest `-rA` / `PASS|FAIL` parsing, pytest-cov / gcovr coverage), `SandboxUnavailableException` → 503
+- [x] Tests: SandboxRunnerTest (11 docker + 3 parsing), OllamaClientTest (6), CurrentUserTest (3),
+  AssignmentServiceTest (+4 visibility/persistence); full suite 183 green
+- [x] Verified: Flyway V26/V27 applied, `ddl-auto: validate` OK; live JSONB round-trip, Ollama chat 8.1 s warm,
+  generated tests 5/5 in sandbox
+- Note: template → course copy does not carry a reference solution (templates have no such field yet)
+
+### Deployment — server stack (out of the box) ✅
+- [x] `Dockerfile` (multi-stage, temurin 25, Docker CLI for sandboxes) + `.dockerignore` (excludes local secrets)
+- [x] `compose.server.yaml`: postgres 16 (+ keycloak DB via init script), keycloak (postgres-backed, health check
+  without curl), s3mock, gitlab + runner, ollama + one-shot model pull, sandbox image builds, backend;
+  `compose.gpu.yaml` NVIDIA override; `.env.example`; `DEPLOY.md`
+- [x] `SandboxRunner`: files streamed via stdin tar into tmpfs `/work` (no bind mount), runs as `nobody`
+- [x] `minio.public-endpoint` for presigned links (backend uses internal `http://s3:9090`)
+- [x] Verified locally under a separate project: all services healthy, Flyway 27 migrations, backend UP,
+  sandbox run from inside the backend container, backend to Ollama reachable
+- Open: frontend container + reverse proxy/TLS; Keycloak `start` mode for production
+
 ---
 
 ## Blocked / Issues

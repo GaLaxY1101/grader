@@ -106,7 +106,7 @@ public class CourseServiceImpl implements CourseService {
 
         List<AssignmentResponse> assignments = assignmentRepository
                 .findAllByCourseIdAndIsActiveTrue(id).stream()
-                .map(AssignmentResponse::from)
+                .map(a -> AssignmentResponse.from(a, currentUser.isStaff()))
                 .toList();
 
         return CourseDetailResponse.from(course, teachers, students, assignments);

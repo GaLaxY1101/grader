@@ -39,14 +39,20 @@ public class ProgrammingTask {
     @Column(name = "test_file_content", columnDefinition = "TEXT")
     private String testFileContent;
 
+    /** Teacher's correct solution; used to validate generated tests. Never shown to students. */
+    @Column(name = "reference_solution", columnDefinition = "TEXT")
+    private String referenceSolution;
+
     /**
      * Updates mutable fields of the programming task.
      */
     public void update(TestMode testMode, String functionSignature,
-                       String testFileContent, String ciConfigTemplate) {
+                       String testFileContent, String ciConfigTemplate,
+                       String referenceSolution) {
         this.testMode = testMode;
         this.functionSignature = functionSignature;
         this.testFileContent = testFileContent;
         this.ciConfigTemplate = ciConfigTemplate;
+        this.referenceSolution = referenceSolution;
     }
 }

@@ -14,6 +14,9 @@ PostgreSQL credentials (from compose.yaml):
 
 Run the app: `GRADER_JWT_SECRET=test-secret-at-least-32-chars-long ./mvnw spring-boot:run`
 
+Server deployment: `compose.server.yaml` + `.env` (see `DEPLOY.md`). `compose.yaml` is the dev stack only.
+Keep their compose project names different (`grader` vs `grader-server`).
+
 ## Tech Stack
 - Java 25, Spring Boot 3.4.x
 - PostgreSQL 16, Flyway migrations
@@ -57,3 +60,46 @@ Run the app: `GRADER_JWT_SECRET=test-secret-at-least-32-chars-long ./mvnw spring
 - Use Mockito for mocking repositories and external clients
 - Test class naming: {ClassName}Test
 - At minimum test: happy path + not found case + validation error case
+
+## AI Test Generation
+Teachers can generate unit tests with a locally hosted LLM; generated tests are validated by
+running them in Docker sandboxes (see `docs/ai-testgen/` in the monorepo root). Code lives in
+package `ua.kpi.grader.testgen`.
+
+### Ollama (required)
+- Install from https://ollama.com and keep it running (`ollama serve`, default port 11434).
+- Pull the configured model once: `ollama pull qwen2.5-coder:3b`
+  (3b chosen for a 6 GB GPU; use `qwen2.5-coder:7b` with >= 8 GB VRAM via `TESTGEN_MODEL`).
+- Smoke test: `curl http://localhost:11434/api/chat -d '{"model":"qwen2.5-coder:3b","stream":false,"messages":[{"role":"user","content":"hi"}]}'`
+
+### Sandbox images
+Generated tests run in `docker run --rm --network none ...`, so all tooling is baked into the images.
+- Server: built automatically by `compose.server.yaml` (services `sandbox-cpp`, `sandbox-python`); see `DEPLOY.md`.
+- Local dev: `./sandbox/build.sh` (Linux/macOS/Git Bash) or `.\sandbox\build.ps1` (PowerShell).
+- `grader-sandbox-cpp:1` — `gcc:13` + `gcovr`; runs `g++ -std=c++17 -o test_runner test.cpp && ./test_runner`.
+- `grader-sandbox-py:1` — `python:3.12-slim` + `pytest`, `pytest-cov`; runs `pytest -q test_solution.py`.
+- `SandboxRunner` streams `solution.*` + test file into the container over stdin (tar) into a tmpfs at
+  `/work`. No bind mounts, so it also works when the backend itself runs in a container using the
+  host's `/var/run/docker.sock`. Bump the image tag when changing a Dockerfile.
+- Hardening: `--user 65534:65534`, `--read-only`, `--cap-drop ALL`, `--pids-limit 64`,
+  memory/CPU limits, output capped at 256 KB. C/C++ tests must print `PASS <name>` / `FAIL <name>: ...` lines.
+- Docker-backed tests are tagged `@Tag("docker")` and skip automatically when the images are missing.
+
+### Configuration (`testgen.*` in application.yml)
+| Property | Default | Meaning |
+|---|---|---|
+| `testgen.ollama.base-url` | `${OLLAMA_BASE_URL:http://localhost:11434}` | Ollama server URL |
+| `testgen.ollama.model` | `${TESTGEN_MODEL:qwen2.5-coder:3b}` | Model used for generation |
+| `testgen.ollama.timeout-seconds` | `180` | HTTP timeout for one LLM call |
+| `testgen.ollama.keep-alive` | `30m` | How long Ollama keeps the model loaded (avoids ~90 s cold loads) |
+| `testgen.ollama.num-ctx` | `8192` | Context window; repair prompts carry conversation history |
+| `testgen.temperature` | `0.2` | Sampling temperature |
+| `testgen.max-iterations` | `3` | Max self-repair iterations (0 = single-shot) |
+| `testgen.min-test-count` | `5` | Minimum tests required; repairs dropping below are rejected |
+| `testgen.mutation-feedback` | `true` | Feed surviving mutants back to the LLM |
+| `testgen.max-mutants` | `10` | Mutants generated per reference solution |
+| `testgen.sandbox.cpp-image` | `grader-sandbox-cpp:1` | C/C++ sandbox image |
+| `testgen.sandbox.python-image` | `grader-sandbox-py:1` | Python sandbox image |
+| `testgen.sandbox.timeout-seconds` | `20` | Wall-clock limit per sandbox run |
+| `testgen.sandbox.memory` | `256m` | Container memory limit |
+| `testgen.sandbox.cpus` | `"1"` | Container CPU limit |

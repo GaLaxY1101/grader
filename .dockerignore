@@ -1,0 +1,12 @@
+# Keep the backend build context small and free of local secrets.
+target/
+.idea/
+.claude/
+.git/
+*.iml
+sandbox/
+keycloak/
+.env
+.env.*
+src/main/resources/application-local.properties
+src/main/resources/application-local.yml

@@ -4,11 +4,12 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import ua.kpi.grader.gitlab.config.GitLabProperties;
+import ua.kpi.grader.testgen.config.TestGenProperties;
 
 import java.util.TimeZone;
 
 @SpringBootApplication
-@EnableConfigurationProperties(GitLabProperties.class)
+@EnableConfigurationProperties({GitLabProperties.class, TestGenProperties.class})
 public class GraderApplication {
 
     public static void main(String[] args) {

@@ -99,6 +99,60 @@ class AssignmentServiceTest {
                 .hasMessageContaining("99");
     }
 
+    // --- reference solution visibility ---
+
+    @Test
+    void findById_hidesReferenceSolution_forStudent() {
+        Assignment assignment = buildAssignmentWithReferenceSolution();
+        when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
+        when(currentUser.isStaff()).thenReturn(false);
+
+        AssignmentResponse result = assignmentService.findById(5L);
+
+        assertThat(result.programmingTask()).isNotNull();
+        assertThat(result.programmingTask().functionSignature()).isEqualTo("def add(a, b)");
+        assertThat(result.programmingTask().referenceSolution()).isNull();
+    }
+
+    @Test
+    void findAllByCourse_hidesReferenceSolution_forStudent() {
+        Assignment assignment = buildAssignmentWithReferenceSolution();
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(assignment.getCourse()));
+        when(assignmentRepository.findAllByCourseIdAndIsActiveTrue(1L)).thenReturn(List.of(assignment));
+        when(currentUser.isStaff()).thenReturn(false);
+
+        List<AssignmentResponse> result = assignmentService.findAllByCourse(1L);
+
+        assertThat(result.get(0).programmingTask().referenceSolution()).isNull();
+    }
+
+    @Test
+    void findById_includesReferenceSolution_forStaff() {
+        Assignment assignment = buildAssignmentWithReferenceSolution();
+        when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
+        when(currentUser.isStaff()).thenReturn(true);
+
+        AssignmentResponse result = assignmentService.findById(5L);
+
+        assertThat(result.programmingTask().referenceSolution()).isEqualTo(REFERENCE_SOLUTION);
+    }
+
+    @Test
+    void updateAssignment_storesReferenceSolution() {
+        Assignment assignment = buildAssignmentWithReferenceSolution();
+        ProgrammingTaskDetails details = new ProgrammingTaskDetails(
+                Language.PYTHON, TestMode.UNIT_TEST, null, "def add(a, b)",
+                "from solution import *\n\ndef test_ok():\n    assert add(1, 2) == 3\n",
+                "def add(a, b):\n    return b + a\n");
+        UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, details);
+        when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
+
+        assignmentService.updateAssignment(5L, request);
+
+        assertThat(assignment.getProgrammingTask().getReferenceSolution())
+                .isEqualTo("def add(a, b):\n    return b + a\n");
+    }
+
     // --- createAssignment ---
 
     @Test
@@ -175,7 +229,7 @@ class AssignmentServiceTest {
         assertThat(assignment.getProgrammingTask()).isNull();
 
         ProgrammingTaskDetails details = new ProgrammingTaskDetails(
-                Language.CPP, TestMode.UNIT_TEST, null, "int solve(int)", "int main(){return 0;}");
+                Language.CPP, TestMode.UNIT_TEST, null, "int solve(int)", "int main(){return 0;}", null);
         UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, details);
         when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
 
@@ -218,7 +272,7 @@ class AssignmentServiceTest {
         ProgrammingTaskDetails details = new ProgrammingTaskDetails(
                 Language.PYTHON, TestMode.UNIT_TEST, null,
                 "def solve(x):\n    pass",
-                "from solution import solve\n\ndef test_ok():\n    assert True\n");
+                "from solution import solve\n\ndef test_ok():\n    assert True\n", null);
         UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, details);
         when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
 
@@ -290,6 +344,23 @@ class AssignmentServiceTest {
                 .build();
         ReflectionTestUtils.setField(assignment, "id", id);
         ReflectionTestUtils.setField(assignment, "isActive", true);
+        return assignment;
+    }
+
+    private static final String REFERENCE_SOLUTION = "def add(a, b):\n    return a + b\n";
+
+    private Assignment buildAssignmentWithReferenceSolution() {
+        Teacher teacher = buildTeacher(1L, 10L);
+        Assignment assignment = buildAssignment(5L, buildCourse(1L), teacher);
+        ProgrammingTask task = ProgrammingTask.builder()
+                .language(Language.PYTHON)
+                .testMode(TestMode.UNIT_TEST)
+                .functionSignature("def add(a, b)")
+                .testFileContent("from solution import *\n")
+                .referenceSolution(REFERENCE_SOLUTION)
+                .build();
+        task.setAssignment(assignment);
+        assignment.setProgrammingTask(task);
         return assignment;
     }
 

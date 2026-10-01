@@ -1,0 +1,196 @@
+# Production-style stack for a single server.
+#
+#   cp .env.example .env        # fill in secrets and PUBLIC_HOST
+#   docker compose -f compose.server.yaml up -d --build
+#
+# With an NVIDIA GPU (needs nvidia-container-toolkit), add the override:
+#   docker compose -f compose.server.yaml -f compose.gpu.yaml up -d --build
+#
+# compose.yaml stays the local development stack (backend runs via ./mvnw).
+
+name: grader-server
+
+services:
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: grader
+      POSTGRES_USER: grader
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGTZ: Europe/Kyiv
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/postgres/init-keycloak-db.sh:/docker-entrypoint-initdb.d/init-keycloak-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grader -d grader"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: grader
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      # Tokens carry this issuer; browsers and the backend must agree on it.
+      KC_HOSTNAME: http://${PUBLIC_HOST:?set PUBLIC_HOST in .env}:${KEYCLOAK_PORT:-9080}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    ports:
+      - "${KEYCLOAK_PORT:-9080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # The image has no curl; probe the management port with bash.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  s3:
+    image: adobe/s3mock:latest
+    restart: unless-stopped
+    environment:
+      initialBuckets: grader-attachments
+      retainFilesOnExit: "true"
+    ports:
+      - "${S3_PORT:-9000}:9090"
+    volumes:
+      - s3_data:/s3mockroot
+
+  gitlab:
+    image: gitlab/gitlab-ce:16.9.1-ce.0
+    restart: unless-stopped
+    hostname: gitlab
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://${PUBLIC_HOST}:${GITLAB_PORT:-8929}'
+        gitlab_rails['gitlab_shell_ssh_port'] = ${GITLAB_SSH_PORT:-2224}
+        gitlab_rails['lfs_enabled'] = false
+        prometheus_monitoring['enable'] = false
+        grafana['enable'] = false
+        alertmanager['enable'] = false
+    ports:
+      - "${GITLAB_PORT:-8929}:${GITLAB_PORT:-8929}"
+      - "${GITLAB_SSH_PORT:-2224}:22"
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    shm_size: 256m
+
+  gitlab-runner:
+    image: gitlab/gitlab-runner:v16.9.1
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gitlab_runner_config:/etc/gitlab-runner
+    depends_on:
+      - gitlab
+
+  # ── AI test generation ─────────────────────────────────────
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  # One-shot: downloads the model into the ollama volume (no-op when already present).
+  ollama-pull:
+    image: ollama/ollama:latest
+    entrypoint: ["ollama"]
+    command: ["pull", "${TESTGEN_MODEL:-qwen2.5-coder:3b}"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  # Build-only: produce the sandbox images the backend starts per test run.
+  # The containers exit immediately; the images stay on the host daemon.
+  sandbox-cpp:
+    build: ./sandbox/cpp
+    image: grader-sandbox-cpp:1
+    command: ["true"]
+    network_mode: none
+    restart: "no"
+
+  sandbox-python:
+    build: ./sandbox/python
+    image: grader-sandbox-py:1
+    command: ["true"]
+    network_mode: none
+    restart: "no"
+
+  # ── Backend ────────────────────────────────────────────────
+
+  backend:
+    build: .
+    image: grader-backend:latest
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: server
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/grader
+      SPRING_DATASOURCE_USERNAME: grader
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      GRADER_JWT_SECRET: ${GRADER_JWT_SECRET:?set GRADER_JWT_SECRET in .env}
+      KEYCLOAK_ISSUER_URI: http://${PUBLIC_HOST}:${KEYCLOAK_PORT:-9080}/realms/university-grader
+      KEYCLOAK_JWK_URI: http://keycloak:8080/realms/university-grader/protocol/openid-connect/certs
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      GITLAB_BASE_URL: http://gitlab:${GITLAB_PORT:-8929}
+      GITLAB_TOKEN: ${GITLAB_TOKEN:-}
+      GITLAB_RUNNER_TOKEN: ${GITLAB_RUNNER_TOKEN:-}
+      GITLAB_WEBHOOK_SECRET: ${GITLAB_WEBHOOK_SECRET:?set GITLAB_WEBHOOK_SECRET in .env}
+      GITLAB_WEBHOOK_BASE_URL: http://backend:8080
+      MINIO_ENDPOINT: http://s3:9090
+      MINIO_PUBLIC_ENDPOINT: http://${PUBLIC_HOST}:${S3_PORT:-9000}
+      OLLAMA_BASE_URL: http://ollama:11434
+      TESTGEN_MODEL: ${TESTGEN_MODEL:-qwen2.5-coder:3b}
+    volumes:
+      # Lets the backend start sandbox containers on the host daemon (see DEPLOY.md, Security).
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      s3:
+        condition: service_started
+      ollama-pull:
+        condition: service_completed_successfully
+      sandbox-cpp:
+        condition: service_completed_successfully
+      sandbox-python:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data:
+  s3_data:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
+  gitlab_runner_config:
+  ollama_data:

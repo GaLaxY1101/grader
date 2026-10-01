@@ -12,6 +12,8 @@ import org.springframework.web.server.ResponseStatusException;
 import ua.kpi.grader.common.dto.BulkImportErrorResponse;
 import ua.kpi.grader.common.dto.ErrorResponse;
 import ua.kpi.grader.common.dto.MissingColumnErrorResponse;
+import ua.kpi.grader.testgen.client.LlmUnavailableException;
+import ua.kpi.grader.testgen.sandbox.SandboxUnavailableException;
 
 import java.time.OffsetDateTime;
 import java.util.stream.Collectors;
@@ -63,6 +65,20 @@ public class GlobalExceptionHandler {
                 .body(new ErrorResponse(502, "Bad Gateway",
                         "Failed to provision user in identity provider: " + ex.getMessage(),
                         OffsetDateTime.now()));
+    }
+
+    @ExceptionHandler(LlmUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleLlmUnavailable(LlmUnavailableException ex) {
+        log.error("LLM unavailable: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(503, "Service Unavailable", ex.getMessage(), OffsetDateTime.now()));
+    }
+
+    @ExceptionHandler(SandboxUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleSandboxUnavailable(SandboxUnavailableException ex) {
+        log.error("Test sandbox unavailable: {}", ex.getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(new ErrorResponse(503, "Service Unavailable", ex.getMessage(), OffsetDateTime.now()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

@@ -45,6 +45,14 @@ public class CurrentUser {
                 .anyMatch(a -> a.getAuthority().equals("ROLE_" + role));
     }
 
+    /**
+     * Returns true if the current user is a TEACHER or ADMIN, i.e. may see
+     * teacher-only data such as reference solutions.
+     */
+    public boolean isStaff() {
+        return hasRole("TEACHER") || hasRole("ADMIN");
+    }
+
     private Jwt getJwt() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return (Jwt) auth.getPrincipal();

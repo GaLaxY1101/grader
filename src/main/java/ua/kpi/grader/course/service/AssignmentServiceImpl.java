@@ -45,7 +45,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     public List<AssignmentResponse> findAllByCourse(Long courseId) {
         findCourseOrThrow(courseId);
         return assignmentRepository.findAllByCourseIdAndIsActiveTrue(courseId).stream()
-                .map(AssignmentResponse::from)
+                .map(a -> AssignmentResponse.from(a, currentUser.isStaff()))
                 .toList();
     }
 
@@ -62,7 +62,7 @@ public class AssignmentServiceImpl implements AssignmentService {
         Assignment assignment = assignmentRepository.findByIdAndIsActiveTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Assignment not found with id: " + id));
-        return AssignmentResponse.from(assignment);
+        return AssignmentResponse.from(assignment, currentUser.isStaff());
     }
 
     /**
@@ -103,7 +103,7 @@ public class AssignmentServiceImpl implements AssignmentService {
             assignment.setProgrammingTask(buildProgrammingTask(assignment, request.programmingTask()));
         }
 
-        return AssignmentResponse.from(assignmentRepository.save(assignment));
+        return AssignmentResponse.from(assignmentRepository.save(assignment), currentUser.isStaff());
     }
 
     private void validateTypeCompatibility(AssignmentType type, ProgrammingTaskDetails programmingTask) {
@@ -147,7 +147,7 @@ public class AssignmentServiceImpl implements AssignmentService {
             assignment.setProgrammingTask(null);
         }
 
-        return AssignmentResponse.from(assignment);
+        return AssignmentResponse.from(assignment, currentUser.isStaff());
     }
 
     /**
@@ -174,6 +174,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .ciConfigTemplate(details.ciConfigTemplate())
                 .functionSignature(details.functionSignature())
                 .testFileContent(details.testFileContent())
+                .referenceSolution(details.referenceSolution())
                 .build();
         programmingTask.setAssignment(assignment);
         return programmingTask;
@@ -182,7 +183,7 @@ public class AssignmentServiceImpl implements AssignmentService {
     private void updateProgrammingTask(ProgrammingTask programmingTask, ProgrammingTaskDetails details) {
         validateProgrammingTask(details);
         programmingTask.update(TestMode.UNIT_TEST, details.functionSignature(),
-                details.testFileContent(), details.ciConfigTemplate());
+                details.testFileContent(), details.ciConfigTemplate(), details.referenceSolution());
     }
 
     private void validateProgrammingTask(ProgrammingTaskDetails details) {

@@ -1,0 +1,297 @@
+package ua.kpi.grader.testgen.sandbox;
+
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIf;
+import ua.kpi.grader.course.entity.Language;
+import ua.kpi.grader.testgen.config.TestGenProperties;
+
+import java.io.IOException;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class SandboxRunnerTest {
+
+    private static final String PY_SOLUTION = "def add(a, b):\n    return a + b\n";
+    private static final String CPP_SOLUTION = "int add(int a, int b) { return a + b; }\n";
+
+    private static SandboxRunner runner(int timeoutSeconds) {
+        TestGenProperties properties = new TestGenProperties(
+                new TestGenProperties.Ollama("http://localhost:11434", "qwen2.5-coder:3b", 180, "30m", 8192),
+                0.2, 3, 5, true, 10,
+                new TestGenProperties.Sandbox("grader-sandbox-cpp:1", "grader-sandbox-py:1",
+                        timeoutSeconds, "256m", "1"));
+        return new SandboxRunner(properties);
+    }
+
+    /** Parsing tests on captured output; no Docker needed. */
+    @Nested
+    class Parsing {
+
+        @Test
+        void parsePython_countsPassedAndFailedFromSummary() {
+            String output = """
+                    @@SANDBOX:COMPILE_EXIT=0
+                    @@SANDBOX:RUN_BEGIN
+                    .F
+                    PASSED test_solution.py::test_ok
+                    FAILED test_solution.py::test_bad[1-2] - AssertionError: wrong sum
+                    1 failed, 1 passed in 0.05s
+                    @@SANDBOX:RUN_EXIT=1
+                    """;
+
+            SandboxResult result = SandboxRunner.parsePython(output, false);
+
+            assertThat(result.compiled()).isTrue();
+            assertThat(result.passed()).isEqualTo(1);
+            assertThat(result.failed()).isEqualTo(1);
+            assertThat(result.failures().get(0).name()).isEqualTo("test_bad[1-2]");
+            assertThat(result.failures().get(0).message()).isEqualTo("AssertionError: wrong sum");
+        }
+
+        @Test
+        void parseCpp_crashAfterPassesAddsSyntheticFailure() {
+            String output = """
+                    @@SANDBOX:COMPILE_EXIT=0
+                    @@SANDBOX:RUN_BEGIN
+                    PASS test_one
+                    @@SANDBOX:RUN_EXIT=139
+                    """;
+
+            SandboxResult result = SandboxRunner.parseCpp(output, false);
+
+            assertThat(result.passed()).isEqualTo(1);
+            assertThat(result.failed()).isEqualTo(1);
+            assertThat(result.failures().get(0).message()).contains("exited with code 139");
+        }
+
+        @Test
+        void truncate_capsLongOutput() {
+            String longText = "x".repeat(SandboxRunner.MAX_OUTPUT_CHARS + 100);
+
+            assertThat(SandboxRunner.truncate(longText, SandboxRunner.MAX_OUTPUT_CHARS))
+                    .hasSizeLessThan(SandboxRunner.MAX_OUTPUT_CHARS + 30)
+                    .endsWith("[truncated]");
+        }
+    }
+
+    /** Runs real containers; needs Docker and the images from {@code sandbox/build.sh}. */
+    @Nested
+    @Tag("docker")
+    @EnabledIf("ua.kpi.grader.testgen.sandbox.SandboxRunnerTest#sandboxImagesAvailable")
+    class Docker {
+
+        private final SandboxRunner runner = runner(20);
+
+        @Test
+        void python_passingTests() {
+            String tests = """
+                    from solution import *
+
+                    def test_positive():
+                        assert add(2, 3) == 5
+
+                    def test_negative():
+                        assert add(-2, -3) == -5
+                    """;
+
+            SandboxResult result = runner.run(Language.PYTHON, PY_SOLUTION, tests);
+
+            assertThat(result.compiled()).isTrue();
+            assertThat(result.passed()).isEqualTo(2);
+            assertThat(result.failed()).isZero();
+            assertThat(result.allPassed()).isTrue();
+            assertThat(result.timedOut()).isFalse();
+        }
+
+        @Test
+        void python_failingTestIsReportedWithMessage() {
+            String tests = """
+                    from solution import *
+
+                    def test_ok():
+                        assert add(2, 3) == 5
+
+                    def test_wrong():
+                        assert add(2, 3) == 6, "expected six"
+                    """;
+
+            SandboxResult result = runner.run(Language.PYTHON, PY_SOLUTION, tests);
+
+            assertThat(result.compiled()).isTrue();
+            assertThat(result.passed()).isEqualTo(1);
+            assertThat(result.failed()).isEqualTo(1);
+            assertThat(result.failures()).singleElement()
+                    .satisfies(f -> {
+                        assertThat(f.name()).isEqualTo("test_wrong");
+                        assertThat(f.message()).contains("expected six");
+                    });
+        }
+
+        @Test
+        void python_syntaxErrorIsCompileFailure() {
+            String tests = "from solution import *\n\ndef test_broken(:\n    assert True\n";
+
+            SandboxResult result = runner.run(Language.PYTHON, PY_SOLUTION, tests);
+
+            assertThat(result.compiled()).isFalse();
+            assertThat(result.compileOutput()).contains("SyntaxError");
+            assertThat(result.total()).isZero();
+        }
+
+        @Test
+        void python_importErrorIsCompileFailure() {
+            String tests = "from solution import multiply\n\ndef test_mul():\n    assert multiply(2, 3) == 6\n";
+
+            SandboxResult result = runner.run(Language.PYTHON, PY_SOLUTION, tests);
+
+            assertThat(result.compiled()).isFalse();
+            assertThat(result.compileOutput()).contains("ImportError");
+        }
+
+        @Test
+        void cpp_compileErrorIsReported() {
+            String tests = """
+                    #include <cstdio>
+                    #include "solution.cpp"
+                    int main() { return add(1, 2) == 3 ? 0 : 1 }
+                    """;
+
+            SandboxResult result = runner.run(Language.CPP, CPP_SOLUTION, tests);
+
+            assertThat(result.compiled()).isFalse();
+            assertThat(result.compileOutput()).contains("error");
+            assertThat(result.total()).isZero();
+        }
+
+        @Test
+        void cpp_parsesPassAndFailLines() {
+            String tests = """
+                    #include <cstdio>
+                    #include "solution.cpp"
+
+                    int check(const char* name, int expected, int actual) {
+                        if (expected == actual) { std::printf("PASS %s\\n", name); return 0; }
+                        std::printf("FAIL %s: expected %d got %d\\n", name, expected, actual);
+                        return 1;
+                    }
+
+                    int main() {
+                        int failures = 0;
+                        failures += check("test_positive", 5, add(2, 3));
+                        failures += check("test_zero", 0, add(0, 0));
+                        failures += check("test_wrong", 7, add(2, 3));
+                        return failures;
+                    }
+                    """;
+
+            SandboxResult result = runner.run(Language.CPP, CPP_SOLUTION, tests);
+
+            assertThat(result.compiled()).isTrue();
+            assertThat(result.passed()).isEqualTo(2);
+            assertThat(result.failed()).isEqualTo(1);
+            assertThat(result.failures()).singleElement()
+                    .satisfies(f -> {
+                        assertThat(f.name()).isEqualTo("test_wrong");
+                        assertThat(f.message()).isEqualTo("expected 7 got 5");
+                    });
+        }
+
+        @Test
+        void cpp_fallsBackToExitCodeWithoutProtocolLines() {
+            String tests = """
+                    #include "solution.cpp"
+                    int main() { return add(2, 3) == 5 ? 0 : 1; }
+                    """;
+
+            SandboxResult result = runner.run(Language.CPP, CPP_SOLUTION, tests);
+
+            assertThat(result.compiled()).isTrue();
+            assertThat(result.passed()).isEqualTo(1);
+            assertThat(result.failed()).isZero();
+        }
+
+        @Test
+        void c_solutionIsIncludedIntoCppTest() {
+            String tests = """
+                    #include <cstdio>
+                    #include "solution.c"
+                    int main() {
+                        if (add(1, 1) == 2) { std::puts("PASS test_add"); return 0; }
+                        std::puts("FAIL test_add: expected 2"); return 1;
+                    }
+                    """;
+
+            SandboxResult result = runner.run(Language.C, CPP_SOLUTION, tests);
+
+            assertThat(result.allPassed()).isTrue();
+        }
+
+        @Test
+        void infiniteLoopTimesOut() {
+            SandboxRunner fastRunner = runner(5);
+            String tests = """
+                    from solution import *
+
+                    def test_forever():
+                        while True:
+                            pass
+                    """;
+
+            long start = System.nanoTime();
+            SandboxResult result = fastRunner.run(Language.PYTHON, PY_SOLUTION, tests);
+            long seconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - start);
+
+            assertThat(result.timedOut()).isTrue();
+            assertThat(result.allPassed()).isFalse();
+            assertThat(seconds).isLessThan(20);
+        }
+
+        @Test
+        void python_coverageIsMeasured() {
+            String solution = "def sign(x):\n    if x > 0:\n        return 1\n    return -1\n";
+            String tests = "from solution import *\n\ndef test_pos():\n    assert sign(5) == 1\n";
+
+            SandboxResult result = runner.runWithCoverage(Language.PYTHON, solution, tests);
+
+            assertThat(result.allPassed()).isTrue();
+            assertThat(result.coveragePct()).isNotNull().isGreaterThan(0.0).isLessThan(100.0);
+        }
+
+        @Test
+        void cpp_coverageIsMeasured() {
+            String solution = "int sign(int x) {\n    if (x > 0) {\n        return 1;\n    }\n    return -1;\n}\n";
+            String tests = """
+                    #include <cstdio>
+                    #include "solution.cpp"
+                    int main() {
+                        if (sign(5) == 1) { std::puts("PASS test_pos"); return 0; }
+                        std::puts("FAIL test_pos: expected 1"); return 1;
+                    }
+                    """;
+
+            SandboxResult result = runner.runWithCoverage(Language.CPP, solution, tests);
+
+            assertThat(result.allPassed()).isTrue();
+            assertThat(result.coveragePct()).isNotNull().isGreaterThan(0.0).isLessThan(100.0);
+        }
+    }
+
+    static boolean sandboxImagesAvailable() {
+        try {
+            Process process = new ProcessBuilder("docker", "image", "inspect",
+                    "grader-sandbox-py:1", "grader-sandbox-cpp:1")
+                    .redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            return process.waitFor(15, TimeUnit.SECONDS) && process.exitValue() == 0;
+        } catch (IOException e) {
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+}

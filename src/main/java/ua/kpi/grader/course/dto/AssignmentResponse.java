@@ -20,7 +20,13 @@ public record AssignmentResponse(
         ProgrammingTaskDetails programmingTask,
         int attachmentCount
 ) {
-    public static AssignmentResponse from(Assignment assignment) {
+    /**
+     * Maps an assignment to its response DTO.
+     *
+     * @param includeReferenceSolution whether the caller may see the programming task's
+     *                                 reference solution (TEACHER/ADMIN only)
+     */
+    public static AssignmentResponse from(Assignment assignment, boolean includeReferenceSolution) {
         return new AssignmentResponse(
                 assignment.getId(),
                 assignment.getCourse().getId(),
@@ -33,7 +39,7 @@ public record AssignmentResponse(
                 assignment.getCreatedBy().getId(),
                 assignment.getCreatedAt(),
                 assignment.getUpdatedAt(),
-                ProgrammingTaskDetails.from(assignment.getProgrammingTask()),
+                ProgrammingTaskDetails.from(assignment.getProgrammingTask(), includeReferenceSolution),
                 assignment.getAttachments() != null ? assignment.getAttachments().size() : 0
         );
     }
