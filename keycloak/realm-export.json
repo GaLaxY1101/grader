@@ -33,7 +33,7 @@
       "enabled": true,
       "publicClient": false,
       "clientAuthenticatorType": "client-secret",
-      "secret": "cbzjG1fOgFN5LpyfRdiF58zm9uOV3adm",
+      "secret": "${GRADER_FRONTEND_CLIENT_SECRET:cbzjG1fOgFN5LpyfRdiF58zm9uOV3adm}",
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
@@ -41,14 +41,14 @@
       "frontchannelLogout": true,
       "protocol": "openid-connect",
       "redirectUris": [
-        "http://localhost:3000/*"
+        "${GRADER_FRONTEND_URL:http://localhost:3000}/*"
       ],
       "webOrigins": [
-        "http://localhost:3000"
+        "${GRADER_FRONTEND_URL:http://localhost:3000}"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:3000/*"
+        "post.logout.redirect.uris": "${GRADER_FRONTEND_URL:http://localhost:3000}/*"
       }
     }
   ],

@@ -44,6 +44,9 @@ services:
       KC_HOSTNAME: http://${PUBLIC_HOST:?set PUBLIC_HOST in .env}:${KEYCLOAK_PORT:-9080}
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HEALTH_ENABLED: "true"
+      # Substituted into keycloak/realm-export.json on the first import only.
+      GRADER_FRONTEND_URL: http://${PUBLIC_HOST}:${FRONTEND_PORT:-3000}
+      GRADER_FRONTEND_CLIENT_SECRET: ${GRADER_FRONTEND_CLIENT_SECRET:?set GRADER_FRONTEND_CLIENT_SECRET in .env}
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     ports:
@@ -153,6 +156,7 @@ services:
       SPRING_DATASOURCE_USERNAME: grader
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       GRADER_JWT_SECRET: ${GRADER_JWT_SECRET:?set GRADER_JWT_SECRET in .env}
+      GRADER_CORS_ORIGINS: http://${PUBLIC_HOST}:${FRONTEND_PORT:-3000}
       KEYCLOAK_ISSUER_URI: http://${PUBLIC_HOST}:${KEYCLOAK_PORT:-9080}/realms/university-grader
       KEYCLOAK_JWK_URI: http://keycloak:8080/realms/university-grader/protocol/openid-connect/certs
       KEYCLOAK_BASE_URL: http://keycloak:8080
@@ -185,6 +189,36 @@ services:
         condition: service_completed_successfully
       sandbox-python:
         condition: service_completed_successfully
+
+  # ── Frontend ───────────────────────────────────────────────
+  # Built from the sibling repository: clone grader-frontend next to grader.
+
+  frontend:
+    build:
+      context: ../grader-frontend
+      args:
+        # Inlined into the browser bundle, so a PUBLIC_HOST change needs `--build`.
+        NEXT_PUBLIC_API_URL: http://${PUBLIC_HOST}:${BACKEND_PORT:-8080}
+    image: grader-frontend:latest
+    restart: unless-stopped
+    environment:
+      NEXTAUTH_URL: http://${PUBLIC_HOST}:${FRONTEND_PORT:-3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?set NEXTAUTH_SECRET in .env}
+      # Server-side calls stay inside the compose network; Keycloak still issues
+      # browser-facing URLs for PUBLIC_HOST (KC_HOSTNAME).
+      KEYCLOAK_BASE_URL: http://keycloak:8080
+      KEYCLOAK_REALM: university-grader
+      KEYCLOAK_CLIENT_ID: grader-frontend
+      KEYCLOAK_CLIENT_SECRET: ${GRADER_FRONTEND_CLIENT_SECRET}
+      NEXT_PUBLIC_API_URL: http://${PUBLIC_HOST}:${BACKEND_PORT:-8080}
+      API_INTERNAL_URL: http://backend:8080
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      backend:
+        condition: service_started
 
 volumes:
   postgres_data:
