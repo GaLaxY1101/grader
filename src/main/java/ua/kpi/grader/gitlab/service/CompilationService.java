@@ -4,31 +4,27 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ua.kpi.grader.course.entity.Language;
-import ua.kpi.grader.submission.feedback.GraderHarness;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
+import ua.kpi.grader.testgen.sandbox.CompileCheck;
+import ua.kpi.grader.testgen.sandbox.SandboxRunner;
+import ua.kpi.grader.testgen.sandbox.SandboxUnavailableException;
 
 /**
- * Validates solution compilation/syntax locally per language.
- * Used to provide early feedback before pushing to GitLab CI.
+ * Validates solution compilation/syntax per language before pushing to GitLab CI.
+ *
+ * <p>The compiler runs in the network-less sandbox container ({@link SandboxRunner}), never in
+ * the backend process: student code could otherwise read backend files through the compiler
+ * (e.g. {@code #include "/proc/self/environ"}), and the backend image has no compilers anyway.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class CompilationService {
 
-    private static final int TIMEOUT_SECONDS = 15;
-
-    private final GraderHarness graderHarness;
+    private final SandboxRunner sandboxRunner;
 
     /**
-     * Compiles a solution file together with a test file (unit test mode).
-     * Writes both files and the grader harness to a temp directory and invokes the appropriate
-     * syntax-check command for the target language.
+     * Compiles a solution file together with a test file (unit test mode), with the grader
+     * harness next to them exactly as in the CI run.
      *
      * @param solutionContent the student's or teacher's solution code
      * @param testFileContent the test file content with assertions
@@ -38,26 +34,7 @@ public class CompilationService {
     public CompilationResult compileSolutionWithTests(String solutionContent,
                                                       String testFileContent,
                                                       Language language) {
-        Path tempDir = null;
-        try {
-            tempDir = Files.createTempDirectory("grader-compile-");
-            Path solutionFile = tempDir.resolve(language.getSolutionFileName());
-            Path testFile = tempDir.resolve(language.getTestFileName());
-
-            Files.writeString(solutionFile, solutionContent);
-            Files.writeString(testFile, testFileContent);
-            // Test files include the grader harness (grader_test.h), exactly as in the CI run.
-            Files.writeString(tempDir.resolve(graderHarness.fileName(language)), graderHarness.content(language));
-
-            List<String> command = buildCheckCommand(language, true);
-            return runProcess(tempDir, command);
-
-        } catch (IOException | InterruptedException e) {
-            log.error("Compilation check failed: {}", e.getMessage(), e);
-            return new CompilationResult(false, "Internal error: " + e.getMessage());
-        } finally {
-            cleanupTempDir(tempDir);
-        }
+        return check(language, solutionContent, testFileContent);
     }
 
     /**
@@ -68,71 +45,16 @@ public class CompilationService {
      * @return compilation result
      */
     public CompilationResult compileSolution(String solutionContent, Language language) {
-        Path tempDir = null;
+        return check(language, solutionContent, null);
+    }
+
+    private CompilationResult check(Language language, String solution, String testFile) {
         try {
-            tempDir = Files.createTempDirectory("grader-compile-");
-            Path solutionFile = tempDir.resolve(language.getSolutionFileName());
-
-            Files.writeString(solutionFile, solutionContent);
-
-            List<String> command = buildCheckCommand(language, false);
-            return runProcess(tempDir, command);
-
-        } catch (IOException | InterruptedException e) {
+            CompileCheck result = sandboxRunner.compileOnly(language, solution, testFile);
+            return new CompilationResult(result.success(), result.output());
+        } catch (SandboxUnavailableException e) {
             log.error("Compilation check failed: {}", e.getMessage(), e);
             return new CompilationResult(false, "Internal error: " + e.getMessage());
-        } finally {
-            cleanupTempDir(tempDir);
-        }
-    }
-
-    private List<String> buildCheckCommand(Language language, boolean withTests) {
-        return switch (language) {
-            case C, CPP -> {
-                String target = withTests ? language.getTestFileName() : language.getSolutionFileName();
-                yield List.of("g++", "-fsyntax-only", "-std=c++17", "-DGRADER_MAIN", target);
-            }
-            case PYTHON -> {
-                if (withTests) {
-                    yield List.of("python", "-m", "py_compile",
-                            language.getSolutionFileName(), language.getTestFileName());
-                }
-                yield List.of("python", "-m", "py_compile", language.getSolutionFileName());
-            }
-        };
-    }
-
-    private CompilationResult runProcess(Path tempDir, List<String> command)
-            throws IOException, InterruptedException {
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.directory(tempDir.toFile());
-        pb.redirectErrorStream(true);
-
-        Process process = pb.start();
-        String output = new String(process.getInputStream().readAllBytes());
-        boolean finished = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-
-        if (!finished) {
-            process.destroyForcibly();
-            return new CompilationResult(false, "Compilation timed out");
-        }
-
-        int exitCode = process.exitValue();
-        return new CompilationResult(exitCode == 0, output.isBlank() ? null : output.strip());
-    }
-
-    private void cleanupTempDir(Path tempDir) {
-        if (tempDir == null) return;
-        try {
-            Files.walk(tempDir)
-                    .sorted((a, b) -> b.compareTo(a))
-                    .forEach(path -> {
-                        try {
-                            Files.deleteIfExists(path);
-                        } catch (IOException ignored) {
-                        }
-                    });
-        } catch (IOException ignored) {
         }
     }
 }

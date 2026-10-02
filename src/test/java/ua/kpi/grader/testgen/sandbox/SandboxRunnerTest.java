@@ -93,6 +93,40 @@ class SandboxRunnerTest {
         private final SandboxRunner runner = runner(20);
 
         @Test
+        void compileOnly_cppWithHarnessTests_compiles() {
+            String tests = """
+                    #include "grader_test.h"
+                    #include "solution.cpp"
+
+                    TEST_CASE(test_add) {
+                        EXPECT_EQ(5, add(2, 3));
+                    }
+                    """;
+
+            CompileCheck result = runner.compileOnly(Language.CPP, CPP_SOLUTION, tests);
+
+            assertThat(result.success()).as(result.output()).isTrue();
+        }
+
+        @Test
+        void compileOnly_brokenCpp_reportsError() {
+            String tests = "#include \"grader_test.h\"\n#include \"solution.cpp\"\nTEST_CASE(t) { EXPECT_EQ(1, f()); }\n";
+
+            CompileCheck result = runner.compileOnly(Language.CPP, "int f() { return 1 }\n", tests);
+
+            assertThat(result.success()).isFalse();
+            assertThat(result.output()).contains("error");
+        }
+
+        @Test
+        void compileOnly_brokenPythonSolutionAlone_reportsSyntaxError() {
+            CompileCheck result = runner.compileOnly(Language.PYTHON, "def add(a, b)\n    return a + b\n", null);
+
+            assertThat(result.success()).isFalse();
+            assertThat(result.output()).contains("SyntaxError");
+        }
+
+        @Test
         void python_passingTests() {
             String tests = """
                     from solution import *

@@ -184,6 +184,46 @@ public class SandboxRunner {
         return valid;
     }
 
+    /**
+     * Compiles (C/C++, {@code g++ -fsyntax-only}) or byte-compiles (Python) code without running
+     * it. Used for early compile feedback on teacher and student code; running the compiler in
+     * the sandbox keeps {@code #include "/proc/self/environ"} and the like away from the backend.
+     *
+     * @param language target language
+     * @param solution solution source code
+     * @param testFile test file to compile together with the solution, or null to check the
+     *                 solution alone
+     * @return compiler verdict and its output (capped at {@link #MAX_OUTPUT_CHARS})
+     * @throws SandboxUnavailableException if Docker cannot be started
+     */
+    public CompileCheck compileOnly(Language language, String solution, String testFile) {
+        Map<String, String> files = new LinkedHashMap<>();
+        files.put(language.getSolutionFileName(), solution);
+        if (testFile != null) {
+            files.put(language.getTestFileName(), testFile);
+            files.put(graderHarness.fileName(language), graderHarness.content(language));
+        }
+        String command = language == Language.PYTHON
+                ? "python -m py_compile " + language.getSolutionFileName()
+                        + (testFile != null ? " " + language.getTestFileName() : "")
+                : "g++ -fsyntax-only -std=c++17 -DGRADER_MAIN "
+                        + (testFile != null ? language.getTestFileName() : language.getSolutionFileName());
+        String script = command + " > compile.log 2>&1; ec=$?; "
+                + "head -c " + MAX_OUTPUT_CHARS + " compile.log; echo; "
+                + "echo '" + MARKER + "COMPILE_EXIT='$ec";
+
+        Execution execution = execute(language, files, script, properties.sandbox().timeoutSeconds());
+        String output = execution.output();
+        Integer exit = Phases.findInt(COMPILE_EXIT, output);
+        if (execution.timedOut() || exit == null) {
+            // No marker: the container never ran the compiler (e.g. image missing); keep Docker's message.
+            String detail = execution.timedOut() ? "Compilation timed out" : truncate(output.strip(), MAX_OUTPUT_CHARS);
+            return new CompileCheck(false, detail);
+        }
+        String compilerOutput = output.substring(0, output.indexOf(MARKER + "COMPILE_EXIT=")).strip();
+        return new CompileCheck(exit == 0, compilerOutput.isEmpty() ? null : compilerOutput);
+    }
+
     private SandboxResult runSingle(Language language, String solution, String testFile, boolean coverage) {
         Map<String, String> files = new LinkedHashMap<>();
         files.put(language.getSolutionFileName(), solution);

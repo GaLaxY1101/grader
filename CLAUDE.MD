@@ -85,6 +85,8 @@ Generated tests run in `docker run --rm --network none ...`, so all tooling is b
   memory/CPU limits, output capped at 256 KB. The grader harness is copied next to the test file;
   results come from its `##GRADER##` events, with `PASS <name>` / `FAIL <name>: ...` lines as the legacy fallback.
 - Docker-backed tests are tagged `@Tag("docker")` and skip automatically when the images are missing.
+- `CompilationService` (compile check for teachers/students) also runs in the sandbox via
+  `SandboxRunner.compileOnly`; never run compilers in the backend process (secrets in its env).
 
 ### Self-repair loop (`TestGenerationServiceImpl`)
 - Iteration 0 = GENERATE (spec only, never the reference solution). Then up to `max-iterations` repairs:
