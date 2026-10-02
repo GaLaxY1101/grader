@@ -1,0 +1,18 @@
+## Task
+{{task}}
+
+Your test file does not compile or cannot be imported.
+
+## Errors
+```
+{{errors}}
+```
+
+## Your previous test file
+```{{fence}}
+{{tests}}
+```
+
+Fix the test file so that it compiles and runs. Keep all test cases and the test file conventions.
+Do not call functions that are not part of the function under test.
+Return the complete corrected test file.

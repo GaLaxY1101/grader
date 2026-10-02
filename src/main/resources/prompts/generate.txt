@@ -1,0 +1,20 @@
+Write a unit test file for the following {{language}} programming task.
+
+## Task description
+{{description}}
+
+## Function under test
+```{{fence}}
+{{signature}}
+```
+
+## Requirements
+- Write at least {{minTests}} separate test cases.
+- Cover normal cases and edge cases: empty input, zero, negative numbers, boundaries, large values,
+  as far as they are valid for this task.
+- Expected values must follow from the task description. If the description does not define the
+  behaviour for some input, do not test that input.
+- Use descriptive test names.
+
+## Test file conventions
+{{conventions}}

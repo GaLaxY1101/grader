@@ -1,0 +1,43 @@
+- File name: test.cpp, compiled with `g++ -std=c++17 test.cpp` and run.
+- Include the solution with `#include "{{solutionFile}}"` after the standard headers.
+- Use only the C++ standard library; no test frameworks.
+- Each test case is a separate function `void test_<name>()` and is called from `main()`.
+- Each test prints exactly one line: `PASS test_<name>` or `FAIL test_<name>: expected <x> got <y>`.
+- Count failures in a global variable; `main()` returns the number of failures.
+
+Example:
+```cpp
+#include <iostream>
+#include <string>
+#include "{{solutionFile}}"
+
+static int failures = 0;
+
+void test_two_positive_numbers() {
+    auto expected = 5;
+    auto actual = add(2, 3);
+    if (actual == expected) {
+        std::cout << "PASS test_two_positive_numbers" << std::endl;
+    } else {
+        std::cout << "FAIL test_two_positive_numbers: expected " << expected << " got " << actual << std::endl;
+        failures++;
+    }
+}
+
+void test_negative_numbers() {
+    auto expected = -5;
+    auto actual = add(-2, -3);
+    if (actual == expected) {
+        std::cout << "PASS test_negative_numbers" << std::endl;
+    } else {
+        std::cout << "FAIL test_negative_numbers: expected " << expected << " got " << actual << std::endl;
+        failures++;
+    }
+}
+
+int main() {
+    test_two_positive_numbers();
+    test_negative_numbers();
+    return failures;
+}
+```

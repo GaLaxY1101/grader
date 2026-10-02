@@ -59,10 +59,24 @@ public class TestGenerationIteration {
     @Column(name = "mutants_total")
     private Integer mutantsTotal;
 
+    /** Held-out mutants (set B) killed; never used as feedback. */
+    @Column(name = "heldout_killed")
+    private Integer heldoutKilled;
+
+    @Column(name = "heldout_total")
+    private Integer heldoutTotal;
+
+    /** Line coverage of the reference solution, percent. */
+    @Column(name = "coverage_pct")
+    private Double coveragePct;
+
     @Column(name = "test_count")
     private Integer testCount;
 
     private Boolean accepted;
+
+    /** Sampling temperature used for this LLM call. */
+    private Double temperature;
 
     @Column(columnDefinition = "TEXT")
     private String feedback;

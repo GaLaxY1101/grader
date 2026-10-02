@@ -11,5 +11,7 @@ public enum PromptType {
     /** Some tests failed on the (correct) reference solution. */
     REPAIR_FAILING,
     /** All tests pass but a mutant survived; its diff is fed back. */
-    KILL_MUTANT
+    KILL_MUTANT,
+    /** No LLM call: tests still failing on the reference after the loop are removed. */
+    PRUNE_FAILING
 }

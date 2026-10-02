@@ -177,6 +177,26 @@ Tables created so far:
   sandbox run from inside the backend container, backend to Ollama reachable
 - Open: frontend container + reverse proxy/TLS; Keycloak `start` mode for production
 
+### AI Test Gen — Phase 1B: Self-repair loop, mutation feedback, API ✅
+- [x] Prompts `resources/prompts/` (system, generate + per-language conventions, repair_compile, repair_failing,
+  kill_mutant) via `PromptBuilder`/`TaskSpec`; reference solution never in prompts
+- [x] `Mutator` (relational, arithmetic, constant ±1, boolean, return→0; skips comments/strings/#include),
+  `MutantPoolBuilder` (batched syntax check, seeded A/B split), `MutantPool.leaksHeldOut` guard
+- [x] `SandboxRunner.runAgainstMutants` (all mutants in one container, per-mutant timeout) + `checkSyntax`
+- [x] `TestGenerationServiceImpl`: loop, anti-cheat guard, async jobs (virtual threads, max 2 concurrent),
+  `runSync` for evaluation, startup recovery of interrupted jobs
+- [x] `TestGenerationController`: POST 202 / GET job; 404, 403 (other teacher), 409 (one running job), 400 validation
+- [x] V28 (held-out kills, coverage), V29 (temperature), V30 (PRUNE_FAILING prompt type)
+- [x] Tests: MutatorTest 11, MutantPoolBuilderTest 3, PromptBuilderTest 7, TestPrunerTest 3,
+  TestGenerationServiceImplTest 25, TestGenerationControllerTest 4, SandboxRunnerTest +3 docker; suite 238 green
+- [x] E2E (qwen2.5-coder:3b, local GPU): Python fib SUCCEEDED (3 repairs stuck on one test → pruned to 7 valid
+  tests, 3/3 feedback mutants killed); C++ reverse_string SUCCEEDED (6 tests, 4/4 mutants, 100% coverage)
+- Deviations from the phase spec, driven by E2E observations with the 3b model:
+  - Repairs without chat history (history made the model copy its last answer); task summary in each repair prompt
+  - Temperature +0.4 after an unchanged repair (0.2 → 0.6 → 1.0)
+  - pytest summary needed `COLUMNS=1000` (failure messages were truncated, so the model never saw the real error)
+  - `import pytest` auto-added; PRUNE_FAILING step (configurable, for ablation in Phase 3)
+
 ---
 
 ## Blocked / Issues

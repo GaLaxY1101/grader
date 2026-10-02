@@ -8,6 +8,7 @@ import ua.kpi.grader.course.entity.Language;
 import ua.kpi.grader.testgen.config.TestGenProperties;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,9 +21,9 @@ class SandboxRunnerTest {
     private static SandboxRunner runner(int timeoutSeconds) {
         TestGenProperties properties = new TestGenProperties(
                 new TestGenProperties.Ollama("http://localhost:11434", "qwen2.5-coder:3b", 180, "30m", 8192),
-                0.2, 3, 5, true, 10,
+                0.2, 3, 5, true, 10, true,
                 new TestGenProperties.Sandbox("grader-sandbox-cpp:1", "grader-sandbox-py:1",
-                        timeoutSeconds, "256m", "1"));
+                        timeoutSeconds, 5, "256m", "1"));
         return new SandboxRunner(properties);
     }
 
@@ -247,6 +248,53 @@ class SandboxRunnerTest {
             assertThat(result.timedOut()).isTrue();
             assertThat(result.allPassed()).isFalse();
             assertThat(seconds).isLessThan(20);
+        }
+
+        @Test
+        void python_mutantBatch_reportsKilledSurvivingAndLoopingMutants() {
+            String tests = "from solution import *\n\ndef test_add():\n    assert add(2, 3) == 5\n";
+            List<String> mutants = List.of(
+                    "def add(a, b):\n    return a - b\n",
+                    "def add(a, b):\n    return b + a\n",
+                    "def add(a, b):\n    while True:\n        pass\n");
+
+            List<SandboxResult> results = runner.runAgainstMutants(Language.PYTHON, tests, mutants);
+
+            assertThat(results).hasSize(3);
+            assertThat(results.get(0).allPassed()).as("a - b is killed").isFalse();
+            assertThat(results.get(1).allPassed()).as("b + a is equivalent and survives").isTrue();
+            assertThat(results.get(2).timedOut()).as("infinite loop is cut off").isTrue();
+            assertThat(results.get(2).allPassed()).isFalse();
+        }
+
+        @Test
+        void cpp_mutantBatch_recompilesEachMutant() {
+            String tests = """
+                    #include <iostream>
+                    #include "solution.cpp"
+                    int main() {
+                        if (add(2, 3) == 5) { std::cout << "PASS test_add" << std::endl; return 0; }
+                        std::cout << "FAIL test_add: expected 5" << std::endl; return 1;
+                    }
+                    """;
+            List<String> mutants = List.of(
+                    "int add(int a, int b) { return a - b; }\n",
+                    "int add(int a, int b) { return a + b; }\n");
+
+            List<SandboxResult> results = runner.runAgainstMutants(Language.CPP, tests, mutants);
+
+            assertThat(results).extracting(SandboxResult::allPassed).containsExactly(false, true);
+        }
+
+        @Test
+        void checkSyntax_flagsBrokenSources() {
+            assertThat(runner.checkSyntax(Language.PYTHON, List.of(
+                    "def f(a):\n    return a < 1\n", "def f(a):\n    return a <\n")))
+                    .containsExactly(true, false);
+            assertThat(runner.checkSyntax(Language.CPP, List.of(
+                    "#include <vector>\nint f(std::vector<int> v) { return v.size(); }\n",
+                    "#include <vector>\nint f(std::vector<=int> v) { return v.size(); }\n")))
+                    .containsExactly(true, false);
         }
 
         @Test

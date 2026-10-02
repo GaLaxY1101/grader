@@ -103,9 +103,11 @@ testgen:
   min-test-count: 5
   mutation-feedback: true
   max-mutants: 10
+  prune-failing: true
   sandbox:
     cpp-image: grader-sandbox-cpp:1
     python-image: grader-sandbox-py:1
     timeout-seconds: 20
+    mutant-timeout-seconds: 5
     memory: 256m
     cpus: "1"

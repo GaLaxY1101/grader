@@ -10,6 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param minTestCount     minimum number of tests a generated file must keep
  * @param mutationFeedback whether surviving mutants are fed back to the LLM
  * @param maxMutants       maximum number of mutants generated per reference solution
+ * @param pruneFailing     after the loop, remove tests that still fail on the reference solution
  */
 @ConfigurationProperties(prefix = "testgen")
 public record TestGenProperties(
@@ -19,6 +20,7 @@ public record TestGenProperties(
         int minTestCount,
         boolean mutationFeedback,
         int maxMutants,
+        boolean pruneFailing,
         Sandbox sandbox
 ) {
 
@@ -41,6 +43,8 @@ public record TestGenProperties(
      * @param cppImage       Docker image for C/C++ tests
      * @param pythonImage    Docker image for Python tests
      * @param timeoutSeconds wall-clock limit for one sandbox run
+     * @param mutantTimeoutSeconds limit for running the tests against one mutant
+     *                             (mutants often loop forever, so this is kept short)
      * @param memory         container memory limit, Docker syntax (e.g. {@code 256m})
      * @param cpus           container CPU limit, Docker syntax (e.g. {@code 1})
      */
@@ -48,6 +52,7 @@ public record TestGenProperties(
             String cppImage,
             String pythonImage,
             int timeoutSeconds,
+            int mutantTimeoutSeconds,
             String memory,
             String cpus
     ) {}

@@ -1,2 +1,10 @@
 /mvnw text eol=lf
 *.cmd text eol=crlf
+
+# Files executed or parsed inside Linux containers must keep LF endings.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+.env.example text eol=lf
+src/main/resources/prompts/*.txt text eol=lf

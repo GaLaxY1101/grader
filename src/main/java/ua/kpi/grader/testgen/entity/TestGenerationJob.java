@@ -9,9 +9,12 @@ import ua.kpi.grader.course.entity.Assignment;
 import ua.kpi.grader.course.entity.Language;
 
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
+/**
+ * One AI test generation run. Iterations are stored separately and loaded through
+ * {@code TestGenerationIterationRepository} (no collection mapping, so saving a detached
+ * job from the background worker can never orphan-delete iterations).
+ */
 @Entity
 @Table(name = "test_generation_jobs")
 @Getter
@@ -73,11 +76,6 @@ public class TestGenerationJob {
     @Column(name = "finished_at")
     private OffsetDateTime finishedAt;
 
-    @OneToMany(mappedBy = "job", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("iterationNo ASC")
-    @Builder.Default
-    private List<TestGenerationIteration> iterations = new ArrayList<>();
-
     /**
      * Marks the job as running.
      */
@@ -101,13 +99,5 @@ public class TestGenerationJob {
         this.status = JobStatus.FAILED;
         this.errorMessage = errorMessage;
         this.finishedAt = OffsetDateTime.now();
-    }
-
-    /**
-     * Appends an iteration and links it to this job.
-     */
-    public void addIteration(TestGenerationIteration iteration) {
-        iteration.setJob(this);
-        iterations.add(iteration);
     }
 }

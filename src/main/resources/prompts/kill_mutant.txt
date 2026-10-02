@@ -1,0 +1,19 @@
+## Task
+{{task}}
+
+All your tests pass on the correct solution, but they also pass on the following buggy
+implementation, so they would not detect this mistake in a student's solution.
+
+## Difference between the correct and the buggy implementation
+```diff
+{{diff}}
+```
+
+## Your current test file
+```{{fence}}
+{{tests}}
+```
+
+Add at least one new test case that passes on the correct implementation but fails on the buggy
+one. Derive the expected value from the task description. Keep all existing tests unchanged.
+Return the complete test file.

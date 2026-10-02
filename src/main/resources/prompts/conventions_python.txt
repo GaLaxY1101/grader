@@ -1,0 +1,21 @@
+- File name: test_solution.py, run with pytest.
+- Import the solution with `from solution import *`.
+- One function `def test_<name>():` per test case.
+- Every assert has a message, e.g. `assert result == expected, f"expected {expected}, got {result}"`.
+- Only the standard library and pytest may be imported. If you use `pytest.raises`, add `import pytest`.
+- Test errors (exceptions) only when the task description says which error is raised.
+
+Example:
+```python
+from solution import *
+
+
+def test_two_positive_numbers():
+    result = add(2, 3)
+    assert result == 5, f"expected 5, got {result}"
+
+
+def test_negative_numbers():
+    result = add(-2, -3)
+    assert result == -5, f"expected -5, got {result}"
+```

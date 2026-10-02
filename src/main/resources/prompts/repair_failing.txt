@@ -1,0 +1,18 @@
+## Task
+{{task}}
+
+Some of your tests fail when run against the reference solution.
+
+The reference solution is known to be correct. The failing tests therefore have wrong expected
+values, wrong assumptions about the task, or bugs in the test code itself (e.g. a missing import).
+
+## Failing tests
+{{failures}}
+
+## Your previous test file
+```{{fence}}
+{{tests}}
+```
+
+Fix or remove only the failing tests. Keep all passing tests unchanged.
+Return the complete corrected test file.

@@ -85,6 +85,19 @@ Generated tests run in `docker run --rm --network none ...`, so all tooling is b
   memory/CPU limits, output capped at 256 KB. C/C++ tests must print `PASS <name>` / `FAIL <name>: ...` lines.
 - Docker-backed tests are tagged `@Tag("docker")` and skip automatically when the images are missing.
 
+### Self-repair loop (`TestGenerationServiceImpl`)
+- Iteration 0 = GENERATE (spec only, never the reference solution). Then up to `max-iterations` repairs:
+  REPAIR_COMPILE → REPAIR_FAILING → KILL_MUTANT (diff of a surviving feedback-set mutant).
+- Mutants (`Mutator`, `MutantPoolBuilder`): split by seed into set A (feedback) and set B (held-out,
+  never in prompts; guarded by `MutantPool.leaksHeldOut`). Every candidate records A/B kills + coverage.
+- Repairs are sent without chat history (system + self-contained prompt); an unchanged answer raises the
+  next call's temperature by 0.4. Python files using `pytest.` get `import pytest` added (`normalize`).
+- Anti-cheat: a candidate with fewer than `min-test-count` tests and fewer than before is rejected.
+- PRUNE_FAILING (no LLM call) runs last when enabled. Every iteration is stored in `test_generation_iterations`.
+- API: `POST /api/test-generation` (202 + jobId), `GET /api/test-generation/{jobId}`; TEACHER/ADMIN,
+  owner-only (ADMIN sees all), one PENDING/RUNNING job per user (409). `runSync(...)` = same loop, no DB.
+- Jobs left RUNNING by a restart are marked FAILED on startup (`InterruptedJobRecovery`).
+
 ### Configuration (`testgen.*` in application.yml)
 | Property | Default | Meaning |
 |---|---|---|
@@ -98,8 +111,10 @@ Generated tests run in `docker run --rm --network none ...`, so all tooling is b
 | `testgen.min-test-count` | `5` | Minimum tests required; repairs dropping below are rejected |
 | `testgen.mutation-feedback` | `true` | Feed surviving mutants back to the LLM |
 | `testgen.max-mutants` | `10` | Mutants generated per reference solution |
+| `testgen.prune-failing` | `true` | After the loop, drop tests still failing on the reference (if ≥ min-test-count remain) |
 | `testgen.sandbox.cpp-image` | `grader-sandbox-cpp:1` | C/C++ sandbox image |
 | `testgen.sandbox.python-image` | `grader-sandbox-py:1` | Python sandbox image |
 | `testgen.sandbox.timeout-seconds` | `20` | Wall-clock limit per sandbox run |
+| `testgen.sandbox.mutant-timeout-seconds` | `5` | Limit per mutant when running tests against mutants |
 | `testgen.sandbox.memory` | `256m` | Container memory limit |
 | `testgen.sandbox.cpus` | `"1"` | Container CPU limit |
