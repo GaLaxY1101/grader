@@ -27,6 +27,7 @@ import ua.kpi.grader.testgen.mutation.Mutant;
 import ua.kpi.grader.testgen.mutation.MutantPool;
 import ua.kpi.grader.testgen.mutation.MutantPoolBuilder;
 import ua.kpi.grader.testgen.prompt.PromptBuilder;
+import ua.kpi.grader.testgen.prompt.SignatureResolver;
 import ua.kpi.grader.testgen.prompt.TaskSpec;
 import ua.kpi.grader.testgen.repository.TestGenerationIterationRepository;
 import ua.kpi.grader.testgen.repository.TestGenerationJobRepository;
@@ -248,7 +249,14 @@ public class TestGenerationServiceImpl implements TestGenerationService {
         MutantPool pool = mutantPoolBuilder.build(request.referenceSolution(), language,
                 config.poolSeed(), config.maxMutants());
 
-        TaskSpec task = new TaskSpec(language, request.taskDescription(), request.functionSignature());
+        String signature = SignatureResolver.resolve(language, request.functionSignature(),
+                request.referenceSolution());
+        if (signature != null && !signature.strip().equals(
+                request.functionSignature() == null ? "" : request.functionSignature().strip())) {
+            log.info("Using signature from reference solution: '{}' (declared '{}')",
+                    signature, request.functionSignature());
+        }
+        TaskSpec task = new TaskSpec(language, request.taskDescription(), signature);
         String systemPrompt = promptBuilder.system();
         String generatePrompt = promptBuilder.generate(task, config.minTestCount());
         List<IterationRecord> iterations = new ArrayList<>();

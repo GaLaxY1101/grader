@@ -13,6 +13,8 @@ Your test file does not compile or cannot be imported.
 {{tests}}
 ```
 
-Fix the test file so that it compiles and runs. Keep all test cases and the test file conventions.
-Do not call functions that are not part of the function under test.
+Fix the test file so that it compiles and runs. Keep the test file conventions.
+Call the function exactly as declared under "Function under test": if an error shows that an argument
+or return type does not match, rewrite that test case with inputs of the correct type instead of copying it.
+Keep the same number of test cases. Do not call functions that are not part of the function under test.
 Return the complete corrected test file.
