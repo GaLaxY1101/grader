@@ -43,16 +43,22 @@ public class ProgrammingTask {
     @Column(name = "reference_solution", columnDefinition = "TEXT")
     private String referenceSolution;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "feedback_level", nullable = false, length = 20)
+    @Builder.Default
+    private FeedbackLevel feedbackLevel = FeedbackLevel.FULL;
+
     /**
      * Updates mutable fields of the programming task.
      */
     public void update(TestMode testMode, String functionSignature,
                        String testFileContent, String ciConfigTemplate,
-                       String referenceSolution) {
+                       String referenceSolution, FeedbackLevel feedbackLevel) {
         this.testMode = testMode;
         this.functionSignature = functionSignature;
         this.testFileContent = testFileContent;
         this.ciConfigTemplate = ciConfigTemplate;
         this.referenceSolution = referenceSolution;
+        this.feedbackLevel = feedbackLevel != null ? feedbackLevel : FeedbackLevel.FULL;
     }
 }

@@ -2,6 +2,7 @@ package ua.kpi.grader.template.mapper;
 
 import org.springframework.stereotype.Component;
 import ua.kpi.grader.course.dto.ProgrammingTaskDetails;
+import ua.kpi.grader.course.entity.FeedbackLevel;
 import ua.kpi.grader.course.entity.TestMode;
 import ua.kpi.grader.template.entity.CourseTemplate;
 import ua.kpi.grader.template.entity.TemplateAssignment;
@@ -28,6 +29,7 @@ public class TemplateContentMapper {
                 .ciConfigTemplate(details.ciConfigTemplate())
                 .functionSignature(details.functionSignature())
                 .testFileContent(details.testFileContent())
+                .feedbackLevel(details.feedbackLevel() != null ? details.feedbackLevel() : FeedbackLevel.FULL)
                 .build();
         task.setAssignment(assignment);
         return task;
@@ -40,7 +42,7 @@ public class TemplateContentMapper {
     public void updateProgrammingTask(TemplateProgrammingTask task, ProgrammingTaskDetails details) {
         validate(details);
         task.update(TestMode.UNIT_TEST, details.functionSignature(),
-                details.testFileContent(), details.ciConfigTemplate());
+                details.testFileContent(), details.ciConfigTemplate(), details.feedbackLevel());
     }
 
     /**
@@ -71,6 +73,7 @@ public class TemplateContentMapper {
                 .ciConfigTemplate(source.getCiConfigTemplate())
                 .functionSignature(source.getFunctionSignature())
                 .testFileContent(source.getTestFileContent())
+                .feedbackLevel(source.getFeedbackLevel())
                 .build();
         copy.setAssignment(destination);
         return copy;

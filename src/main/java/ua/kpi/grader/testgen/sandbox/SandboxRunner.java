@@ -4,6 +4,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ua.kpi.grader.course.entity.Language;
+import ua.kpi.grader.submission.feedback.GraderHarness;
+import ua.kpi.grader.submission.feedback.TestCaseResult;
+import ua.kpi.grader.submission.feedback.TestCaseStatus;
+import ua.kpi.grader.submission.feedback.TestReport;
+import ua.kpi.grader.submission.feedback.TestReportParser;
+import ua.kpi.grader.submission.feedback.TestRunStatus;
 import ua.kpi.grader.testgen.config.TestGenProperties;
 
 import java.io.IOException;
@@ -32,6 +38,10 @@ import java.util.regex.Pattern;
  * (Python) the sources, then runs the tests. Marker lines printed by the container script
  * separate the compile phase from the test phase so compile errors can be told apart from
  * failing tests.
+ *
+ * <p>The grader harness ({@link GraderHarness}) is copied next to the test file, exactly as in
+ * graded attempts. When the run prints harness events, results come from {@link TestReportParser};
+ * otherwise the legacy {@code PASS}/{@code FAIL} lines and pytest summary are parsed.
  */
 @Slf4j
 @Component
@@ -72,6 +82,7 @@ public class SandboxRunner {
     private static final String UNPACK_SOURCES = "tar -x -f - -C /work && cd /work && ";
 
     private final TestGenProperties properties;
+    private final GraderHarness graderHarness;
 
     /**
      * Compiles and runs {@code testFile} against {@code solution} in the sandbox.
@@ -115,6 +126,7 @@ public class SandboxRunner {
         }
         Map<String, String> files = new LinkedHashMap<>();
         files.put(language.getTestFileName(), testFile);
+        files.put(graderHarness.fileName(language), graderHarness.content(language));
         for (int i = 0; i < mutants.size(); i++) {
             files.put(mutantFileName(language, i), mutants.get(i));
         }
@@ -176,6 +188,7 @@ public class SandboxRunner {
         Map<String, String> files = new LinkedHashMap<>();
         files.put(language.getSolutionFileName(), solution);
         files.put(language.getTestFileName(), testFile);
+        files.put(graderHarness.fileName(language), graderHarness.content(language));
         String steps = language == Language.PYTHON
                 ? pythonSteps(coverage, null)
                 : cppSteps(language, coverage, null);
@@ -234,7 +247,7 @@ public class SandboxRunner {
      * @param runTimeoutSeconds if non-null, the test binary is killed after this many seconds
      */
     static String cppSteps(Language language, boolean coverage, Integer runTimeoutSeconds) {
-        String flags = coverage ? "-std=c++17 -O0 --coverage" : "-std=c++17";
+        String flags = coverage ? "-std=c++17 -DGRADER_MAIN -O0 --coverage" : "-std=c++17 -DGRADER_MAIN";
         String solutionPattern = language.getSolutionFileName().replace(".", "\\.");
         String coverageStep = coverage
                 ? "echo '" + MARKER + "COVERAGE_BEGIN'; gcovr -r /work --filter '.*" + solutionPattern + "$' -s 2>&1;"
@@ -364,9 +377,20 @@ public class SandboxRunner {
                 ? phases.compileOutput()
                 : compiled ? "" : phases.runOutput();
 
+        TestReport report = TestReportParser.hasEvents(phases.runOutput())
+                ? TestReportParser.parse(phases.runOutput())
+                : null;
+        if (report != null && report.status() == TestRunStatus.COMPILE_ERROR) {
+            compiled = false;
+            compileOutput = report.compileOutput();
+        }
+
         int passed = 0;
         List<TestFailure> failures = new ArrayList<>();
-        if (compiled) {
+        if (compiled && report != null) {
+            passed = report.passed();
+            failures.addAll(failuresOf(report));
+        } else if (compiled) {
             Matcher m = PYTEST_RESULT.matcher(phases.runOutput());
             while (m.find()) {
                 String name = testName(m.group(2));
@@ -398,7 +422,15 @@ public class SandboxRunner {
 
         int passed = 0;
         List<TestFailure> failures = new ArrayList<>();
-        if (compiled) {
+        if (compiled && TestReportParser.hasEvents(testOutput)) {
+            TestReport report = TestReportParser.parse(testOutput);
+            passed = report.passed();
+            failures.addAll(failuresOf(report));
+            if (failures.isEmpty() && (report.status() != TestRunStatus.COMPLETED || runExit == null || runExit != 0)) {
+                // Crash before the first test or after the last one: count the run itself as failing.
+                failures.add(new TestFailure("main", exitMessage(runExit, timedOut || killed, testOutput)));
+            }
+        } else if (compiled) {
             Matcher pass = CPP_PASS.matcher(testOutput);
             while (pass.find()) {
                 passed++;
@@ -427,6 +459,33 @@ public class SandboxRunner {
         }
         String compileOutput = compiled ? "" : phases.compileOutput();
         return result(compiled, compileOutput, passed, failures, timedOut || killed, output, coverage);
+    }
+
+    /** Non-passing tests of a harness report as failures, with expected/got in the message. */
+    private static List<TestFailure> failuresOf(TestReport report) {
+        List<TestFailure> failures = new ArrayList<>();
+        for (TestCaseResult test : report.tests()) {
+            if (test.status() != TestCaseStatus.PASSED && test.status() != TestCaseStatus.SKIPPED) {
+                failures.add(new TestFailure(test.name(), truncate(describe(test), MAX_FAILURE_MESSAGE_CHARS)));
+            }
+        }
+        return failures;
+    }
+
+    static String describe(TestCaseResult test) {
+        String values = test.expected() != null || test.actual() != null
+                ? "expected " + test.expected() + ", got " + test.actual()
+                : null;
+        String detail = switch (test.status()) {
+            case CRASHED -> "crashed (the program terminated during this test)";
+            case TIMEOUT -> "timed out";
+            case NOT_RUN -> "not run (the program terminated earlier)";
+            default -> test.message();
+        };
+        if (values == null) {
+            return detail == null ? test.status().name().toLowerCase() : detail;
+        }
+        return detail == null || detail.isBlank() ? values : values + " (" + detail + ")";
     }
 
     private static SandboxResult result(boolean compiled, String compileOutput, int passed,

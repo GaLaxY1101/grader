@@ -143,7 +143,7 @@ class AssignmentServiceTest {
         ProgrammingTaskDetails details = new ProgrammingTaskDetails(
                 Language.PYTHON, TestMode.UNIT_TEST, null, "def add(a, b)",
                 "from solution import *\n\ndef test_ok():\n    assert add(1, 2) == 3\n",
-                "def add(a, b):\n    return b + a\n");
+                "def add(a, b):\n    return b + a\n", null);
         UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, details);
         when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
 
@@ -229,7 +229,7 @@ class AssignmentServiceTest {
         assertThat(assignment.getProgrammingTask()).isNull();
 
         ProgrammingTaskDetails details = new ProgrammingTaskDetails(
-                Language.CPP, TestMode.UNIT_TEST, null, "int solve(int)", "int main(){return 0;}", null);
+                Language.CPP, TestMode.UNIT_TEST, null, "int solve(int)", "int main(){return 0;}", null, null);
         UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, details);
         when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
 
@@ -272,7 +272,7 @@ class AssignmentServiceTest {
         ProgrammingTaskDetails details = new ProgrammingTaskDetails(
                 Language.PYTHON, TestMode.UNIT_TEST, null,
                 "def solve(x):\n    pass",
-                "from solution import solve\n\ndef test_ok():\n    assert True\n", null);
+                "from solution import solve\n\ndef test_ok():\n    assert True\n", null, null);
         UpdateAssignmentRequest request = new UpdateAssignmentRequest("HW", null, 50, null, details);
         when(assignmentRepository.findByIdAndIsActiveTrue(5L)).thenReturn(Optional.of(assignment));
 

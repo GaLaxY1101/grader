@@ -5,7 +5,13 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import ua.kpi.grader.submission.feedback.TestCaseResult;
+import ua.kpi.grader.submission.feedback.TestReport;
+import ua.kpi.grader.submission.feedback.TestRunStatus;
+
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "attempts")
@@ -44,6 +50,25 @@ public class Attempt {
     @Column(name = "pipeline_output", columnDefinition = "TEXT")
     private String pipelineOutput;
 
+    @Column(name = "tests_passed")
+    private Integer testsPassed;
+
+    @Column(name = "tests_total")
+    private Integer testsTotal;
+
+    /** Overall outcome parsed from the log; null for attempts graded before structured feedback existed. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "test_run_status", length = 20)
+    private TestRunStatus testRunStatus;
+
+    @Column(name = "compile_output", columnDefinition = "TEXT")
+    private String compileOutput;
+
+    @OneToMany(mappedBy = "attempt", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("position ASC")
+    @Builder.Default
+    private List<AttemptTestResult> testResults = new ArrayList<>();
+
     @Column(name = "submitted_at", nullable = false)
     @Builder.Default
     private OffsetDateTime submittedAt = OffsetDateTime.now();
@@ -71,5 +96,38 @@ public class Attempt {
         this.status = newStatus;
         this.score = newScore;
         this.pipelineOutput = output;
+    }
+
+    /**
+     * Replaces the structured test results with the given parsed report.
+     * A report without details clears the counters, so only the raw log is shown.
+     */
+    public void applyTestReport(TestReport report) {
+        this.testResults.clear();
+        if (!report.detailsAvailable()) {
+            this.testsPassed = null;
+            this.testsTotal = null;
+            this.testRunStatus = null;
+            this.compileOutput = null;
+            return;
+        }
+        this.testsPassed = report.passed();
+        this.testsTotal = report.total();
+        this.testRunStatus = report.status();
+        this.compileOutput = report.compileOutput();
+        int position = 0;
+        for (TestCaseResult test : report.tests()) {
+            AttemptTestResult result = AttemptTestResult.builder()
+                    .position(position++)
+                    .name(test.name())
+                    .status(test.status())
+                    .expected(test.expected())
+                    .actual(test.actual())
+                    .message(test.message())
+                    .durationMs(test.durationMs())
+                    .build();
+            result.setAttempt(this);
+            this.testResults.add(result);
+        }
     }
 }

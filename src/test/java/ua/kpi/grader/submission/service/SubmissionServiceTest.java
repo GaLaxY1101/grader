@@ -10,17 +10,25 @@ import org.springframework.test.util.ReflectionTestUtils;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.course.entity.Assignment;
 import ua.kpi.grader.course.entity.Course;
+import ua.kpi.grader.course.entity.FeedbackLevel;
+import ua.kpi.grader.course.entity.Language;
+import ua.kpi.grader.course.entity.ProgrammingTask;
 import ua.kpi.grader.course.repository.AssignmentRepository;
 import ua.kpi.grader.gitlab.client.GitLabApiClient;
+import ua.kpi.grader.gitlab.client.dto.GitLabJobDto;
 import ua.kpi.grader.gitlab.service.GitLabSubmissionService;
 import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.submission.dto.AttemptResponse;
+import ua.kpi.grader.submission.dto.AttemptStatusResponse;
+import ua.kpi.grader.submission.dto.TestReportResponse;
 import ua.kpi.grader.submission.dto.CreateSubmissionRequest;
 import ua.kpi.grader.submission.dto.SubmissionResponse;
 import ua.kpi.grader.submission.dto.SubmissionStatusResponse;
 import ua.kpi.grader.submission.entity.Attempt;
 import ua.kpi.grader.submission.entity.Submission;
 import ua.kpi.grader.submission.entity.SubmissionStatus;
+import ua.kpi.grader.submission.feedback.TestCaseStatus;
+import ua.kpi.grader.submission.feedback.TestRunStatus;
 import ua.kpi.grader.submission.repository.AttemptRepository;
 import ua.kpi.grader.submission.repository.SubmissionRepository;
 import ua.kpi.grader.user.entity.Role;
@@ -268,6 +276,199 @@ class SubmissionServiceTest {
         assertThatThrownBy(() -> submissionService.getMySubmission(99L))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("99");
+    }
+
+    // --- applyGitLabResult / structured feedback ---
+
+    private static final String P = "##GRADER## ";
+    private static final String FAILING_LOG = P + "{\"event\":\"plan\",\"tests\":[\"t_ok\",\"t_bad\"]}\n"
+            + P + "{\"event\":\"start\",\"name\":\"t_ok\"}\n"
+            + P + "{\"event\":\"result\",\"name\":\"t_ok\",\"status\":\"PASSED\",\"durationMs\":1}\n"
+            + P + "{\"event\":\"start\",\"name\":\"t_bad\"}\n"
+            + P + "{\"event\":\"result\",\"name\":\"t_bad\",\"status\":\"FAILED\","
+            + "\"expected\":\"5\",\"actual\":\"6\",\"message\":\"EXPECT_EQ\"}\n"
+            + P + "{\"event\":\"end\"}\n";
+
+    private Attempt attemptWithPipeline(FeedbackLevel level) {
+        Assignment assignment = buildAssignment(1L);
+        ProgrammingTask task = ProgrammingTask.builder()
+                .language(Language.CPP)
+                .feedbackLevel(level)
+                .build();
+        ReflectionTestUtils.setField(assignment, "programmingTask", task);
+        Submission submission = buildSubmission(1L, assignment, buildStudent(1L, STUDENT_EMAIL));
+        Attempt attempt = buildAttempt(7L, submission, 1, "code");
+        attempt.startPipeline(55L);
+        when(attemptRepository.findByGitlabPipelineId(55L)).thenReturn(Optional.of(attempt));
+        return attempt;
+    }
+
+    private void stubLog(String log) {
+        when(gitLabApiClient.getPipelineJobs(9, 55)).thenReturn(List.of(new GitLabJobDto(3, "test", "failed", null)));
+        when(gitLabApiClient.getJobLog(9, 3)).thenReturn(log);
+    }
+
+    private Attempt gradedAttempt(FeedbackLevel level) {
+        Attempt attempt = attemptWithPipeline(level);
+        stubLog(FAILING_LOG);
+        submissionService.applyGitLabResult(9L, 55L, "failed");
+        return attempt;
+    }
+
+    private void asStudent() {
+        when(currentUser.hasRole("STUDENT")).thenReturn(true);
+        when(currentUser.getEmail()).thenReturn(STUDENT_EMAIL);
+        when(currentUser.isStaff()).thenReturn(false);
+    }
+
+    @Test
+    void applyGitLabResult_failingTests_persistsStructuredResults() {
+        Attempt attempt = gradedAttempt(FeedbackLevel.FULL);
+
+        assertThat(attempt.getStatus()).isEqualTo(SubmissionStatus.FAILED);
+        assertThat(attempt.getScore()).isZero();
+        assertThat(attempt.getTestsPassed()).isEqualTo(1);
+        assertThat(attempt.getTestsTotal()).isEqualTo(2);
+        assertThat(attempt.getTestRunStatus()).isEqualTo(TestRunStatus.COMPLETED);
+        assertThat(attempt.getTestResults()).hasSize(2);
+        assertThat(attempt.getTestResults().get(1).getPosition()).isEqualTo(1);
+        assertThat(attempt.getTestResults().get(1).getExpected()).isEqualTo("5");
+        assertThat(attempt.getTestResults().get(1).getActual()).isEqualTo("6");
+        assertThat(attempt.getTestResults().get(1).getAttempt()).isSameAs(attempt);
+    }
+
+    @Test
+    void applyGitLabResult_secondCall_replacesPreviousResults() {
+        Attempt attempt = gradedAttempt(FeedbackLevel.FULL);
+
+        submissionService.applyGitLabResult(9L, 55L, "failed");
+
+        assertThat(attempt.getTestResults()).hasSize(2);
+    }
+
+    @Test
+    void applyGitLabResult_successButReportShowsFailure_downgradesToFailed() {
+        Attempt attempt = attemptWithPipeline(FeedbackLevel.FULL);
+        stubLog(FAILING_LOG);
+
+        submissionService.applyGitLabResult(9L, 55L, "success");
+
+        assertThat(attempt.getStatus()).isEqualTo(SubmissionStatus.FAILED);
+        assertThat(attempt.getScore()).isZero();
+    }
+
+    @Test
+    void applyGitLabResult_logWithoutDetails_keepsPipelineStatusAndRawLogOnly() {
+        Attempt attempt = attemptWithPipeline(FeedbackLevel.FULL);
+        stubLog("all good\n");
+
+        submissionService.applyGitLabResult(9L, 55L, "success");
+
+        assertThat(attempt.getStatus()).isEqualTo(SubmissionStatus.PASSED);
+        assertThat(attempt.getScore()).isEqualTo(100);
+        assertThat(attempt.getTestRunStatus()).isNull();
+        assertThat(attempt.getTestsTotal()).isNull();
+        assertThat(attempt.getPipelineOutput()).contains("all good");
+    }
+
+    @Test
+    void applyGitLabResult_compileError_storesCompilerOutput() {
+        Attempt attempt = attemptWithPipeline(FeedbackLevel.FULL);
+        stubLog(P + "{\"event\":\"compile_failed\"}\nsolution.cpp:1: error: boom\nERROR: Job failed: exit code 1\n");
+
+        submissionService.applyGitLabResult(9L, 55L, "failed");
+
+        assertThat(attempt.getTestRunStatus()).isEqualTo(TestRunStatus.COMPILE_ERROR);
+        assertThat(attempt.getCompileOutput()).isEqualTo("solution.cpp:1: error: boom");
+    }
+
+    @Test
+    void getAttemptStatus_student_fullLevel_seesValuesButNoRawLog() {
+        Attempt attempt = gradedAttempt(FeedbackLevel.FULL);
+        when(attemptRepository.findByIdWithDetails(7L)).thenReturn(Optional.of(attempt));
+        asStudent();
+
+        AttemptStatusResponse response = submissionService.getAttemptStatus(7L);
+
+        TestReportResponse report = response.testReport();
+        assertThat(report.detailsAvailable()).isTrue();
+        assertThat(report.feedbackLevel()).isEqualTo(FeedbackLevel.FULL);
+        assertThat(report.tests()).hasSize(2);
+        assertThat(report.tests().get(1).expected()).isEqualTo("5");
+        assertThat(response.pipelineOutput()).isNull();
+    }
+
+    @Test
+    void getAttemptStatus_student_fullLevel_withoutReport_fallsBackToRawLog() {
+        Attempt attempt = attemptWithPipeline(FeedbackLevel.FULL);
+        stubLog("test_runner: test.cpp:5: Assertion `add(1, 2) == 3' failed.\n");
+        submissionService.applyGitLabResult(9L, 55L, "failed");
+        when(attemptRepository.findByIdWithDetails(7L)).thenReturn(Optional.of(attempt));
+        asStudent();
+
+        AttemptStatusResponse response = submissionService.getAttemptStatus(7L);
+
+        assertThat(response.testReport().detailsAvailable()).isFalse();
+        assertThat(response.pipelineOutput()).contains("Assertion");
+    }
+
+    @Test
+    void getAttemptStatus_student_namesOnly_withoutReport_hidesRawLog() {
+        Attempt attempt = attemptWithPipeline(FeedbackLevel.NAMES_ONLY);
+        stubLog("test_runner: test.cpp:5: Assertion `add(1, 2) == 3' failed.\n");
+        submissionService.applyGitLabResult(9L, 55L, "failed");
+        when(attemptRepository.findByIdWithDetails(7L)).thenReturn(Optional.of(attempt));
+        asStudent();
+
+        assertThat(submissionService.getAttemptStatus(7L).pipelineOutput()).isNull();
+    }
+
+    @Test
+    void getAttemptStatus_student_namesOnly_hidesValuesAndLog() {
+        Attempt attempt = gradedAttempt(FeedbackLevel.NAMES_ONLY);
+        when(attemptRepository.findByIdWithDetails(7L)).thenReturn(Optional.of(attempt));
+        asStudent();
+
+        AttemptStatusResponse response = submissionService.getAttemptStatus(7L);
+
+        TestReportResponse report = response.testReport();
+        assertThat(report.tests()).extracting("name").containsExactly("t_ok", "t_bad");
+        assertThat(report.tests()).extracting("status")
+                .containsExactly(TestCaseStatus.PASSED, TestCaseStatus.FAILED);
+        assertThat(report.tests().get(1).expected()).isNull();
+        assertThat(report.tests().get(1).actual()).isNull();
+        assertThat(report.tests().get(1).message()).isNull();
+        assertThat(response.pipelineOutput()).isNull();
+    }
+
+    @Test
+    void getAttemptStatus_student_summary_showsOnlyCounts() {
+        Attempt attempt = gradedAttempt(FeedbackLevel.SUMMARY);
+        when(attemptRepository.findByIdWithDetails(7L)).thenReturn(Optional.of(attempt));
+        asStudent();
+
+        AttemptStatusResponse response = submissionService.getAttemptStatus(7L);
+
+        assertThat(response.testReport().passed()).isEqualTo(1);
+        assertThat(response.testReport().total()).isEqualTo(2);
+        assertThat(response.testReport().tests()).isEmpty();
+        assertThat(response.pipelineOutput()).isNull();
+    }
+
+    @Test
+    void listAttempts_teacher_summaryLevel_stillSeesEverything() {
+        Attempt attempt = gradedAttempt(FeedbackLevel.SUMMARY);
+        when(submissionRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(attempt.getSubmission()));
+        when(attemptRepository.findAllBySubmissionIdOrderByAttemptNumberDesc(1L)).thenReturn(List.of(attempt));
+        when(currentUser.hasRole("STUDENT")).thenReturn(false);
+        when(currentUser.isStaff()).thenReturn(true);
+
+        List<AttemptResponse> responses = submissionService.listAttempts(1L);
+
+        TestReportResponse report = responses.getFirst().testReport();
+        assertThat(report.feedbackLevel()).isEqualTo(FeedbackLevel.FULL);
+        assertThat(report.tests().get(1).expected()).isEqualTo("5");
+        assertThat(responses.getFirst().pipelineOutput()).isNotNull();
     }
 
     // --- helpers ---

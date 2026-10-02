@@ -1,8 +1,10 @@
 package ua.kpi.grader.gitlab.service;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ua.kpi.grader.course.entity.Language;
+import ua.kpi.grader.submission.feedback.GraderHarness;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -16,13 +18,16 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class CompilationService {
 
     private static final int TIMEOUT_SECONDS = 15;
 
+    private final GraderHarness graderHarness;
+
     /**
      * Compiles a solution file together with a test file (unit test mode).
-     * Writes both files to a temp directory and invokes the appropriate
+     * Writes both files and the grader harness to a temp directory and invokes the appropriate
      * syntax-check command for the target language.
      *
      * @param solutionContent the student's or teacher's solution code
@@ -41,6 +46,8 @@ public class CompilationService {
 
             Files.writeString(solutionFile, solutionContent);
             Files.writeString(testFile, testFileContent);
+            // Test files include the grader harness (grader_test.h), exactly as in the CI run.
+            Files.writeString(tempDir.resolve(graderHarness.fileName(language)), graderHarness.content(language));
 
             List<String> command = buildCheckCommand(language, true);
             return runProcess(tempDir, command);
@@ -83,7 +90,7 @@ public class CompilationService {
         return switch (language) {
             case C, CPP -> {
                 String target = withTests ? language.getTestFileName() : language.getSolutionFileName();
-                yield List.of("g++", "-fsyntax-only", "-std=c++17", target);
+                yield List.of("g++", "-fsyntax-only", "-std=c++17", "-DGRADER_MAIN", target);
             }
             case PYTHON -> {
                 if (withTests) {

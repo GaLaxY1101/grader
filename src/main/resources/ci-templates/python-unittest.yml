@@ -6,5 +6,10 @@ stages:
 test:
   stage: test
   script:
-    - pip install --quiet pytest
-    - pytest test_solution.py
+    - pip install --quiet --root-user-action=ignore pytest
+    - |
+      timeout 30s pytest -q -p no:cacheprovider test_solution.py || {
+        rc=$?
+        if [ $rc -eq 124 ]; then echo '##GRADER## {"event":"timeout"}'; fi
+        exit $rc
+      }

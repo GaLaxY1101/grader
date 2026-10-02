@@ -76,13 +76,14 @@ package `ua.kpi.grader.testgen`.
 Generated tests run in `docker run --rm --network none ...`, so all tooling is baked into the images.
 - Server: built automatically by `compose.server.yaml` (services `sandbox-cpp`, `sandbox-python`); see `DEPLOY.md`.
 - Local dev: `./sandbox/build.sh` (Linux/macOS/Git Bash) or `.\sandbox\build.ps1` (PowerShell).
-- `grader-sandbox-cpp:1` — `gcc:13` + `gcovr`; runs `g++ -std=c++17 -o test_runner test.cpp && ./test_runner`.
+- `grader-sandbox-cpp:1` — `gcc:13` + `gcovr`; runs `g++ -std=c++17 -DGRADER_MAIN -o test_runner test.cpp && ./test_runner`.
 - `grader-sandbox-py:1` — `python:3.12-slim` + `pytest`, `pytest-cov`; runs `pytest -q test_solution.py`.
 - `SandboxRunner` streams `solution.*` + test file into the container over stdin (tar) into a tmpfs at
   `/work`. No bind mounts, so it also works when the backend itself runs in a container using the
   host's `/var/run/docker.sock`. Bump the image tag when changing a Dockerfile.
 - Hardening: `--user 65534:65534`, `--read-only`, `--cap-drop ALL`, `--pids-limit 64`,
-  memory/CPU limits, output capped at 256 KB. C/C++ tests must print `PASS <name>` / `FAIL <name>: ...` lines.
+  memory/CPU limits, output capped at 256 KB. The grader harness is copied next to the test file;
+  results come from its `##GRADER##` events, with `PASS <name>` / `FAIL <name>: ...` lines as the legacy fallback.
 - Docker-backed tests are tagged `@Tag("docker")` and skip automatically when the images are missing.
 
 ### Self-repair loop (`TestGenerationServiceImpl`)
@@ -118,3 +119,22 @@ Generated tests run in `docker run --rm --network none ...`, so all tooling is b
 | `testgen.sandbox.mutant-timeout-seconds` | `5` | Limit per mutant when running tests against mutants |
 | `testgen.sandbox.memory` | `256m` | Container memory limit |
 | `testgen.sandbox.cpus` | `"1"` | Container CPU limit |
+
+## Structured Test Feedback
+Students see per-test results (expected/got) instead of a raw CI log. Plan: `docs/test-feedback/PLAN.md`
+in the monorepo root.
+- Harness (`src/main/resources/harness/`): `grader_test.h` (C/C++, `TEST_CASE` / `EXPECT_EQ` / `EXPECT_TRUE` /
+  `EXPECT_NEAR`, `main()` via `-DGRADER_MAIN`) and `conftest.py` (pytest plugin; tests use
+  `assert actual == expected`). `GitLabSubmissionService` commits the harness with every attempt;
+  `SandboxRunner` copies it into the AI test-generation sandbox.
+- Event protocol: one JSON per line prefixed `##GRADER## ` — `plan`, `start`, `result`, `end` from the harness,
+  `compile_failed` / `timeout` from the CI script.
+- `submission/feedback/TestReportParser` (pure, no Spring) turns a job log into a `TestReport`; derives
+  CRASHED (start without result), NOT_RUN, TIMEOUT; falls back to PASS/FAIL and pytest summary lines.
+- Stored in `attempt_test_results` + `attempts.tests_passed/tests_total/test_run_status/compile_output` (V31).
+- `programming_tasks.feedback_level` (V32): FULL / NAMES_ONLY / SUMMARY for students; staff always get FULL.
+  Students below FULL also lose `compileOutput`. Students get `pipelineOutput` only as a fallback when there is
+  no structured report (legacy tests, custom CI) and the level is FULL; staff always get it.
+- A successful pipeline is downgraded to FAILED when the harness report shows a non-passing test or no
+  `end` event (e.g. `exit(0)` in student code).
+- Known limitation: student code shares the process with the harness and can print fake events; see the plan.

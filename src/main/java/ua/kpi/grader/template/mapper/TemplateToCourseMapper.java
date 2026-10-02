@@ -40,6 +40,7 @@ public class TemplateToCourseMapper {
                 .ciConfigTemplate(source.getCiConfigTemplate())
                 .functionSignature(source.getFunctionSignature())
                 .testFileContent(source.getTestFileContent())
+                .feedbackLevel(source.getFeedbackLevel())
                 .build();
         task.setAssignment(assignment);
         return task;

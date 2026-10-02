@@ -63,12 +63,16 @@ final class TestPruner {
         return String.join("\n", lines);
     }
 
-    /** Removes {@code void name() { ... }} and every {@code name();} call. */
+    /** Removes {@code TEST_CASE(name) { ... }}, or {@code void name() { ... }} and every {@code name();} call. */
     private static String removeCpp(String src, String name) {
-        Matcher m = Pattern.compile("(?m)^[ \\t]*(?:static\\s+)?(?:inline\\s+)?(?:void|bool|int)\\s+"
-                + Pattern.quote(name) + "\\s*\\(\\s*\\)\\s*\\{").matcher(src);
+        Matcher m = Pattern.compile("(?m)^[ \\t]*TEST_CASE\\s*\\(\\s*" + Pattern.quote(name)
+                + "\\s*\\)\\s*\\{").matcher(src);
         if (!m.find()) {
-            return null;
+            m = Pattern.compile("(?m)^[ \\t]*(?:static\\s+)?(?:inline\\s+)?(?:void|bool|int)\\s+"
+                    + Pattern.quote(name) + "\\s*\\(\\s*\\)\\s*\\{").matcher(src);
+            if (!m.find()) {
+                return null;
+            }
         }
         int close = matchingBrace(src, m.end() - 1);
         if (close < 0) {

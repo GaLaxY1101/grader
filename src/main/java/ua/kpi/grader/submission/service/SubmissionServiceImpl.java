@@ -6,6 +6,8 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
+import ua.kpi.grader.course.entity.FeedbackLevel;
+import ua.kpi.grader.course.entity.ProgrammingTask;
 import ua.kpi.grader.course.repository.AssignmentRepository;
 import ua.kpi.grader.gitlab.client.GitLabApiClient;
 import ua.kpi.grader.gitlab.client.dto.GitLabJobDto;
@@ -15,6 +17,9 @@ import ua.kpi.grader.submission.dto.*;
 import ua.kpi.grader.submission.entity.Attempt;
 import ua.kpi.grader.submission.entity.Submission;
 import ua.kpi.grader.submission.entity.SubmissionStatus;
+import ua.kpi.grader.submission.feedback.TestReport;
+import ua.kpi.grader.submission.feedback.TestReportParser;
+import ua.kpi.grader.submission.feedback.TestRunStatus;
 import ua.kpi.grader.submission.repository.AttemptRepository;
 import ua.kpi.grader.submission.repository.SubmissionRepository;
 import ua.kpi.grader.user.entity.Student;
@@ -67,7 +72,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         gitLabSubmissionService.triggerPipeline(submission, attempt);
         submission.updateFromAttempt(attempt);
 
-        return AttemptResponse.from(attempt);
+        return AttemptResponse.from(attempt, visibleFeedbackLevel(attempt), currentUser.isStaff());
     }
 
     /**
@@ -151,7 +156,7 @@ public class SubmissionServiceImpl implements SubmissionService {
         Submission submission = findWithDetailsOrThrow(submissionId);
         enforceStudentOwnership(submission);
         return attemptRepository.findAllBySubmissionIdOrderByAttemptNumberDesc(submissionId).stream()
-                .map(AttemptResponse::from)
+                .map(attempt -> AttemptResponse.from(attempt, visibleFeedbackLevel(attempt), currentUser.isStaff()))
                 .toList();
     }
 
@@ -165,12 +170,16 @@ public class SubmissionServiceImpl implements SubmissionService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Attempt not found with id: " + attemptId));
         enforceStudentOwnership(attempt.getSubmission());
-        return AttemptStatusResponse.from(attempt);
+        return AttemptStatusResponse.from(attempt, visibleFeedbackLevel(attempt), currentUser.isStaff());
     }
 
     /**
      * Applies the GitLab pipeline result to the matching attempt and its parent submission.
-     * Fetches job logs, maps GitLab status to SubmissionStatus, and persists the result.
+     * Fetches job logs, parses per-test results from them, maps the GitLab status to
+     * SubmissionStatus, and persists the result.
+     *
+     * <p>A successful pipeline is downgraded to FAILED when the harness report shows a test that
+     * did not pass or a run that ended early (e.g. {@code exit(0)} in student code).
      */
     @Override
     @Transactional
@@ -181,19 +190,27 @@ public class SubmissionServiceImpl implements SubmissionService {
 
         Submission submission = attempt.getSubmission();
 
+        String logs = fetchCombinedLogs(gitlabProjectId.intValue(), gitlabPipelineId.intValue());
+        TestReport report = TestReportParser.parse(logs);
+
         SubmissionStatus status = mapStatus(gitlabStatus);
+        if (status == SubmissionStatus.PASSED && contradictsSuccess(report)) {
+            log.warn("Pipeline {} succeeded but the test report shows {}/{} passed ({}); marking attempt as FAILED",
+                    gitlabPipelineId, report.passed(), report.total(), report.status());
+            status = SubmissionStatus.FAILED;
+        }
         Integer score = switch (status) {
             case PASSED -> submission.getAssignment().getMaxScore();
             case FAILED -> 0;
             default -> null;
         };
 
-        String logs = fetchCombinedLogs(gitlabProjectId.intValue(), gitlabPipelineId.intValue());
         attempt.applyResult(status, score, logs);
+        attempt.applyTestReport(report);
         submission.updateFromAttempt(attempt);
 
-        log.info("Applied GitLab result to attempt id={} (submission={}): status={}, score={}",
-                attempt.getId(), submission.getId(), status, score);
+        log.info("Applied GitLab result to attempt id={} (submission={}): status={}, score={}, tests={}/{}",
+                attempt.getId(), submission.getId(), status, score, report.passed(), report.total());
     }
 
     /**
@@ -217,6 +234,23 @@ public class SubmissionServiceImpl implements SubmissionService {
             submission.markGradedIfFileWorkflow();
         }
         return SubmissionResponse.from(submission);
+    }
+
+    private static boolean contradictsSuccess(TestReport report) {
+        return report.fromEvents()
+                && (report.status() != TestRunStatus.COMPLETED || report.hasNonPassingTests());
+    }
+
+    /**
+     * Feedback level the current user sees for an attempt: FULL for staff,
+     * the programming task's level for students.
+     */
+    private FeedbackLevel visibleFeedbackLevel(Attempt attempt) {
+        if (currentUser.isStaff()) {
+            return FeedbackLevel.FULL;
+        }
+        ProgrammingTask task = attempt.getSubmission().getAssignment().getProgrammingTask();
+        return task != null && task.getFeedbackLevel() != null ? task.getFeedbackLevel() : FeedbackLevel.FULL;
     }
 
     private SubmissionStatus mapStatus(String gitlabStatus) {

@@ -63,6 +63,26 @@ class TestPrunerTest {
     }
 
     @Test
+    void cpp_removesHarnessTestCase() {
+        String tests = """
+                #include "grader_test.h"
+                #include "solution.cpp"
+
+                TEST_CASE(test_ok) {
+                    EXPECT_EQ(std::string("ba"), rev("ab"));
+                }
+
+                TEST_CASE(test_bad) {
+                    EXPECT_EQ(std::string("{"), rev("}"));
+                }
+                """;
+
+        String pruned = TestPruner.remove(Language.CPP, tests, Set.of("test_bad"));
+
+        assertThat(pruned).contains("TEST_CASE(test_ok)").doesNotContain("test_bad");
+    }
+
+    @Test
     void returnsNull_whenTestCannotBeLocated() {
         assertThat(TestPruner.remove(Language.PYTHON, "def test_a():\n    pass\n", Set.of("test_missing"))).isNull();
         assertThat(TestPruner.remove(Language.CPP, "int main() { return 0; }\n", Set.of("main"))).isNull();

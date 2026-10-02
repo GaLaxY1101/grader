@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import ua.kpi.grader.gitlab.client.dto.GitLabJobDto;
 import ua.kpi.grader.gitlab.client.dto.GitLabPipelineDto;
@@ -164,6 +165,26 @@ public class GitLabApiClient {
         }
         log.debug("Created commit {} in project id={}", sha, projectId);
         return sha;
+    }
+
+    /**
+     * Checks whether a file exists on the {@code main} branch of a project.
+     * Used to choose between "create" and "update" for files added after the first attempt.
+     *
+     * @param projectId the GitLab project id
+     * @param filePath  file path relative to the repository root
+     * @return true if the file exists
+     */
+    public boolean fileExists(Integer projectId, String filePath) {
+        try {
+            restClient.head()
+                    .uri("/projects/{projectId}/repository/files/{filePath}?ref=main", projectId, filePath)
+                    .retrieve()
+                    .toBodilessEntity();
+            return true;
+        } catch (HttpClientErrorException.NotFound e) {
+            return false;
+        }
     }
 
     // ── Webhooks ──────────────────────────────────────────────

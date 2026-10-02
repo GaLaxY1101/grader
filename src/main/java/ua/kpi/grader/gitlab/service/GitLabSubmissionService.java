@@ -12,6 +12,7 @@ import ua.kpi.grader.gitlab.config.GitLabProperties;
 import ua.kpi.grader.submission.entity.Attempt;
 import ua.kpi.grader.submission.entity.Submission;
 import ua.kpi.grader.submission.entity.SubmissionStatus;
+import ua.kpi.grader.submission.feedback.GraderHarness;
 
 import java.util.List;
 
@@ -24,11 +25,12 @@ public class GitLabSubmissionService {
     private final CiConfigService ciConfigService;
     private final ProgrammingTaskRepository programmingTaskRepository;
     private final GitLabProperties properties;
+    private final GraderHarness graderHarness;
 
     /**
      * Orchestrates the full GitLab pipeline trigger for an attempt.
-     * On the first attempt, creates a GitLab project, pushes the student's code
-     * and .gitlab-ci.yml, and registers the webhook.
+     * On the first attempt, creates a GitLab project, pushes the student's code, the test file,
+     * the grader harness and .gitlab-ci.yml, and registers the webhook.
      * On subsequent attempts, updates the existing files to trigger a new pipeline.
      * On any failure, marks the attempt as ERROR and does not throw.
      *
@@ -50,6 +52,8 @@ public class GitLabSubmissionService {
             String ciYaml = ciConfigService.generateCiConfig(task.getCiConfigTemplate(), task.getLanguage());
             String solutionFileName = task.getLanguage().getSolutionFileName();
             String testFileName = task.getLanguage().getTestFileName();
+            String harnessFileName = graderHarness.fileName(task.getLanguage());
+            String harnessContent = graderHarness.content(task.getLanguage());
 
             boolean isFirstAttempt = submission.getGitlabProjectId() == null;
             String commitSha;
@@ -64,6 +68,7 @@ public class GitLabSubmissionService {
                         List.of(
                                 new FileAction("create", solutionFileName, attempt.getCodeContent()),
                                 new FileAction("create", testFileName, task.getTestFileContent()),
+                                new FileAction("create", harnessFileName, harnessContent),
                                 new FileAction("create", ".gitlab-ci.yml", ciYaml)
                         ));
 
@@ -71,12 +76,16 @@ public class GitLabSubmissionService {
                 gitLabApiClient.registerWebhook(newProjectId, webhookUrl);
             } else {
                 Integer existingProjectId = submission.getGitlabProjectId().intValue();
+                // Projects created before the harness existed do not have the file yet.
+                String harnessAction = gitLabApiClient.fileExists(existingProjectId, harnessFileName)
+                        ? "update" : "create";
 
                 commitSha = gitLabApiClient.commitFiles(existingProjectId,
                         "Attempt %d".formatted(attempt.getAttemptNumber()),
                         List.of(
                                 new FileAction("update", solutionFileName, attempt.getCodeContent()),
                                 new FileAction("update", testFileName, task.getTestFileContent()),
+                                new FileAction(harnessAction, harnessFileName, harnessContent),
                                 new FileAction("update", ".gitlab-ci.yml", ciYaml)
                         ));
             }

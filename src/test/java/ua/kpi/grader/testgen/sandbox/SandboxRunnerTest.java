@@ -5,6 +5,12 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import ua.kpi.grader.course.entity.Language;
+import ua.kpi.grader.submission.feedback.GraderHarness;
+import ua.kpi.grader.submission.feedback.TestCaseResult;
+import ua.kpi.grader.submission.feedback.TestCaseStatus;
+import ua.kpi.grader.submission.feedback.TestReport;
+import ua.kpi.grader.submission.feedback.TestReportParser;
+import ua.kpi.grader.submission.feedback.TestRunStatus;
 import ua.kpi.grader.testgen.config.TestGenProperties;
 
 import java.io.IOException;
@@ -24,7 +30,7 @@ class SandboxRunnerTest {
                 0.2, 3, 5, true, 10, true,
                 new TestGenProperties.Sandbox("grader-sandbox-cpp:1", "grader-sandbox-py:1",
                         timeoutSeconds, 5, "256m", "1"));
-        return new SandboxRunner(properties);
+        return new SandboxRunner(properties, new GraderHarness());
     }
 
     /** Parsing tests on captured output; no Docker needed. */
@@ -324,6 +330,199 @@ class SandboxRunnerTest {
 
             assertThat(result.allPassed()).isTrue();
             assertThat(result.coveragePct()).isNotNull().isGreaterThan(0.0).isLessThan(100.0);
+        }
+    }
+
+    /** The grader harness (grader_test.h / conftest.py) run end to end in the sandbox images. */
+    @Nested
+    @Tag("docker")
+    @EnabledIf("ua.kpi.grader.testgen.sandbox.SandboxRunnerTest#sandboxImagesAvailable")
+    class Harness {
+
+        private final SandboxRunner runner = runner(20);
+
+        private static final String CPP_HARNESS_SOLUTION = """
+                #include <stdexcept>
+                #include <string>
+                #include <vector>
+                int add(int a, int b) { return a + b; }
+                bool isPal(const std::string& s) { return s.size() < 2; }
+                std::vector<int> firstThree() { return {1, 2, 3}; }
+                int boom() { throw std::runtime_error("bad input"); }
+                int crash() { volatile int* p = nullptr; return *p; }
+                void spin() { for (volatile int i = 0; ; i = i + 1) {} }
+                """;
+
+        private static TestReport report(SandboxResult result) {
+            return TestReportParser.parse(result.rawOutput());
+        }
+
+        @Test
+        void cpp_passingFailingAndExceptionWithValues() {
+            String tests = """
+                    #include "grader_test.h"
+                    #include "solution.cpp"
+
+                    TEST_CASE(test_add) { EXPECT_EQ(5, add(2, 3)); }
+                    TEST_CASE(test_mixed_case) { EXPECT_EQ(true, isPal("Abba")); }
+                    TEST_CASE(test_vector) { EXPECT_EQ((std::vector<int>{1, 2, 4}), firstThree()); }
+                    TEST_CASE(test_string) { EXPECT_EQ("abc", std::string("abd")); }
+                    TEST_CASE(test_exception) { boom(); }
+                    """;
+
+            SandboxResult result = runner.run(Language.CPP, CPP_HARNESS_SOLUTION, tests);
+            TestReport report = report(result);
+
+            assertThat(result.compiled()).isTrue();
+            assertThat(result.passed()).isEqualTo(1);
+            assertThat(result.failed()).isEqualTo(4);
+            assertThat(report.status()).isEqualTo(TestRunStatus.COMPLETED);
+            assertThat(report.tests()).extracting(TestCaseResult::status).containsExactly(
+                    TestCaseStatus.PASSED, TestCaseStatus.FAILED, TestCaseStatus.FAILED,
+                    TestCaseStatus.FAILED, TestCaseStatus.ERROR);
+            assertThat(report.tests().get(1)).extracting(TestCaseResult::expected, TestCaseResult::actual)
+                    .containsExactly("true", "false");
+            assertThat(report.tests().get(2)).extracting(TestCaseResult::expected, TestCaseResult::actual)
+                    .containsExactly("[1, 2, 4]", "[1, 2, 3]");
+            assertThat(report.tests().get(3)).extracting(TestCaseResult::expected, TestCaseResult::actual)
+                    .containsExactly("\"abc\"", "\"abd\"");
+            assertThat(report.tests().get(4).message()).contains("bad input");
+            assertThat(result.failures().getFirst().message()).isEqualTo("expected true, got false (EXPECT_EQ(true, isPal(\"Abba\")))");
+        }
+
+        @Test
+        void cpp_segfaultMarksCrashedAndNotRun() {
+            String tests = """
+                    #include "grader_test.h"
+                    #include "solution.cpp"
+
+                    TEST_CASE(test_ok) { EXPECT_EQ(5, add(2, 3)); }
+                    TEST_CASE(test_crash) { EXPECT_EQ(0, crash()); }
+                    TEST_CASE(test_after) { EXPECT_EQ(2, add(1, 1)); }
+                    """;
+
+            TestReport report = report(runner.run(Language.CPP, CPP_HARNESS_SOLUTION, tests));
+
+            assertThat(report.status()).isEqualTo(TestRunStatus.CRASHED);
+            assertThat(report.tests()).extracting(TestCaseResult::status).containsExactly(
+                    TestCaseStatus.PASSED, TestCaseStatus.CRASHED, TestCaseStatus.NOT_RUN);
+        }
+
+        @Test
+        void cpp_infiniteLoopLeavesTestUnfinished() {
+            String tests = """
+                    #include "grader_test.h"
+                    #include "solution.cpp"
+
+                    TEST_CASE(test_ok) { EXPECT_EQ(5, add(2, 3)); }
+                    TEST_CASE(test_loop) { spin(); }
+                    """;
+
+            // Per-run "timeout -s KILL" (as in the mutant batch) keeps the output printed before the kill.
+            SandboxResult result = runner.runAgainstMutants(Language.CPP, tests, List.of(CPP_HARNESS_SOLUTION))
+                    .getFirst();
+            TestReport report = report(result);
+
+            assertThat(result.timedOut()).isTrue();
+            assertThat(result.allPassed()).isFalse();
+            assertThat(report.tests()).extracting(TestCaseResult::status)
+                    .containsExactly(TestCaseStatus.PASSED, TestCaseStatus.CRASHED);
+        }
+
+        @Test
+        void cpp_compileError() {
+            String tests = """
+                    #include "grader_test.h"
+                    #include "solution.cpp"
+
+                    TEST_CASE(test_add) { EXPECT_EQ(5, add(2, 3)) }
+                    """;
+
+            SandboxResult result = runner.run(Language.CPP, CPP_HARNESS_SOLUTION, tests);
+
+            assertThat(result.compiled()).isFalse();
+            assertThat(result.compileOutput()).contains("error");
+        }
+
+        @Test
+        void c_solutionWithHarness() {
+            String tests = """
+                    #include "grader_test.h"
+                    #include "solution.c"
+
+                    TEST_CASE(test_add) { EXPECT_EQ(2, add(1, 1)); }
+                    """;
+
+            SandboxResult result = runner.run(Language.C, CPP_SOLUTION, tests);
+
+            assertThat(result.allPassed()).isTrue();
+            assertThat(report(result).fromEvents()).isTrue();
+        }
+
+        @Test
+        void python_failingWithValuesAndException() {
+            String solution = PY_SOLUTION + "def boom():\n    raise ValueError('bad input')\n";
+            String tests = """
+                    from solution import *
+
+                    def test_ok():
+                        assert add(2, 3) == 5
+
+                    def test_list():
+                        actual = [add(1, 0), add(1, 1), add(1, 2)]
+                        assert actual == [1, 2, 4]
+
+                    def test_string():
+                        assert str(add(1, 1)) == "3"
+
+                    def test_exception():
+                        boom()
+                    """;
+
+            SandboxResult result = runner.run(Language.PYTHON, solution, tests);
+            TestReport report = report(result);
+
+            assertThat(result.compiled()).isTrue();
+            assertThat(result.passed()).isEqualTo(1);
+            assertThat(report.status()).isEqualTo(TestRunStatus.COMPLETED);
+            assertThat(report.tests()).extracting(TestCaseResult::status).containsExactly(
+                    TestCaseStatus.PASSED, TestCaseStatus.FAILED, TestCaseStatus.FAILED, TestCaseStatus.ERROR);
+            assertThat(report.tests().get(1)).extracting(TestCaseResult::expected, TestCaseResult::actual)
+                    .containsExactly("[1, 2, 4]", "[1, 2, 3]");
+            assertThat(report.tests().get(2)).extracting(TestCaseResult::expected, TestCaseResult::actual)
+                    .containsExactly("'3'", "'2'");
+            assertThat(report.tests().get(3).message()).isEqualTo("ValueError: bad input");
+        }
+
+        @Test
+        void python_importErrorIsCompileFailure() {
+            String tests = "from solution import *\n\ndef test_ok():\n    assert add(1, 2) == 3\n";
+
+            SandboxResult result = runner.run(Language.PYTHON, "import missing_module\n" + PY_SOLUTION, tests);
+
+            assertThat(result.compiled()).isFalse();
+            assertThat(result.compileOutput()).contains("ModuleNotFoundError").doesNotContain("site-packages");
+        }
+
+        @Test
+        void python_infiniteLoopLeavesTestUnfinished() {
+            String tests = """
+                    from solution import *
+
+                    def test_ok():
+                        assert add(2, 3) == 5
+
+                    def test_forever():
+                        while True:
+                            pass
+                    """;
+
+            SandboxResult result = runner.runAgainstMutants(Language.PYTHON, tests, List.of(PY_SOLUTION)).getFirst();
+            TestReport report = report(result);
+
+            assertThat(result.timedOut()).isTrue();
+            assertThat(report.tests()).extracting(TestCaseResult::status)
+                    .containsExactly(TestCaseStatus.PASSED, TestCaseStatus.CRASHED);
         }
     }
 

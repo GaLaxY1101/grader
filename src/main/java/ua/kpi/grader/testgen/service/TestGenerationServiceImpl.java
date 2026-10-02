@@ -78,7 +78,8 @@ public class TestGenerationServiceImpl implements TestGenerationService {
     private static final Pattern PY_TEST = Pattern.compile("(?m)^\\s*def\\s+test_\\w*\\s*\\(");
     private static final Pattern CPP_TEST_FUNCTION =
             Pattern.compile("(?m)^\\s*(?:static\\s+)?(?:inline\\s+)?(?:void|bool|int)\\s+(test_\\w+)\\s*\\(\\s*\\)\\s*\\{");
-    private static final Pattern CPP_PASS_LITERAL = Pattern.compile("\"PASS[ \"]");
+    private static final Pattern CPP_TEST_CASE = Pattern.compile("(?m)^\\s*TEST_CASE\\s*\\(\\s*(\\w+)\\s*\\)");
+    private static final Pattern CPP_PASS_LITERAL =Pattern.compile("\"PASS[ \"]");
     private static final Pattern PY_IMPORTS_PYTEST =
             Pattern.compile("(?m)^\\s*(import\\s+pytest\\b|from\\s+pytest\\s+import)");
 
@@ -440,8 +441,8 @@ public class TestGenerationServiceImpl implements TestGenerationService {
     // ── Helpers ───────────────────────────────────────────────
 
     /**
-     * Counts test cases statically: pytest functions for Python; distinct {@code test_*}
-     * functions (or {@code "PASS"} print sites as a fallback) for C/C++.
+     * Counts test cases statically: pytest functions for Python; distinct {@code TEST_CASE(name)}
+     * harness tests and {@code test_*} functions (or {@code "PASS"} print sites as a fallback) for C/C++.
      */
     static int countTests(Language language, String tests) {
         if (tests == null || tests.isBlank()) {
@@ -454,6 +455,10 @@ public class TestGenerationServiceImpl implements TestGenerationService {
         Matcher m = CPP_TEST_FUNCTION.matcher(tests);
         while (m.find()) {
             names.add(m.group(1));
+        }
+        Matcher harness = CPP_TEST_CASE.matcher(tests);
+        while (harness.find()) {
+            names.add(harness.group(1));
         }
         return names.isEmpty() ? (int) CPP_PASS_LITERAL.matcher(tests).results().count() : names.size();
     }

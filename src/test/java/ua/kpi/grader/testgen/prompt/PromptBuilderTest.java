@@ -29,7 +29,7 @@ class PromptBuilderTest {
     void generate_c_includesSolutionDotC() {
         String prompt = builder.generate(new TaskSpec(Language.C, "Sum two ints.", "int add(int a, int b);"), 5);
 
-        assertThat(prompt).contains("#include \"solution.c\"", "PASS test_", "```c\n");
+        assertThat(prompt).contains("#include \"solution.c\"", "#include \"grader_test.h\"", "TEST_CASE(test_","```c\n");
     }
 
     @Test
@@ -40,7 +40,7 @@ class PromptBuilderTest {
 
         assertThat(compile).contains("## Task", "Return the n-th Fibonacci number.", "def fib(n):",
                 "from solution import *", "SyntaxError", "def test_a(): pass");
-        assertThat(cpp).contains("Reverse.", "#include", "solution.cpp", "PASS test_<name>");
+        assertThat(cpp).contains("Reverse.", "#include", "solution.cpp", "TEST_CASE(test_<name>)");
     }
 
     @Test

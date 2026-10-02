@@ -11,6 +11,7 @@ import ua.kpi.grader.course.dto.UpdateAssignmentRequest;
 import ua.kpi.grader.course.entity.Assignment;
 import ua.kpi.grader.course.entity.AssignmentType;
 import ua.kpi.grader.course.entity.Course;
+import ua.kpi.grader.course.entity.FeedbackLevel;
 import ua.kpi.grader.course.entity.ProgrammingTask;
 import ua.kpi.grader.course.entity.TestMode;
 import ua.kpi.grader.course.repository.AssignmentRepository;
@@ -175,6 +176,7 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .functionSignature(details.functionSignature())
                 .testFileContent(details.testFileContent())
                 .referenceSolution(details.referenceSolution())
+                .feedbackLevel(details.feedbackLevel() != null ? details.feedbackLevel() : FeedbackLevel.FULL)
                 .build();
         programmingTask.setAssignment(assignment);
         return programmingTask;
@@ -183,7 +185,8 @@ public class AssignmentServiceImpl implements AssignmentService {
     private void updateProgrammingTask(ProgrammingTask programmingTask, ProgrammingTaskDetails details) {
         validateProgrammingTask(details);
         programmingTask.update(TestMode.UNIT_TEST, details.functionSignature(),
-                details.testFileContent(), details.ciConfigTemplate(), details.referenceSolution());
+                details.testFileContent(), details.ciConfigTemplate(), details.referenceSolution(),
+                details.feedbackLevel());
     }
 
     private void validateProgrammingTask(ProgrammingTaskDetails details) {

@@ -2,6 +2,7 @@ package ua.kpi.grader.template.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import ua.kpi.grader.course.entity.FeedbackLevel;
 import ua.kpi.grader.course.entity.Language;
 import ua.kpi.grader.course.entity.TestMode;
 
@@ -41,14 +42,20 @@ public class TemplateProgrammingTask {
     @Column(name = "test_file_content", columnDefinition = "TEXT")
     private String testFileContent;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "feedback_level", nullable = false, length = 20)
+    @Builder.Default
+    private FeedbackLevel feedbackLevel = FeedbackLevel.FULL;
+
     /**
      * Updates mutable fields of the template programming task.
      */
     public void update(TestMode testMode, String functionSignature,
-                       String testFileContent, String ciConfigTemplate) {
+                       String testFileContent, String ciConfigTemplate, FeedbackLevel feedbackLevel) {
         this.testMode = testMode;
         this.functionSignature = functionSignature;
         this.testFileContent = testFileContent;
         this.ciConfigTemplate = ciConfigTemplate;
+        this.feedbackLevel = feedbackLevel != null ? feedbackLevel : FeedbackLevel.FULL;
     }
 }

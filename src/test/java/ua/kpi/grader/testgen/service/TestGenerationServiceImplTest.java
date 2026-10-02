@@ -476,6 +476,8 @@ class TestGenerationServiceImplTest {
 
         assertThat(TestGenerationServiceImpl.countTests(Language.CPP, functions)).isEqualTo(2);
         assertThat(TestGenerationServiceImpl.countTests(Language.CPP, inline)).isEqualTo(2);
+        String harness = "#include \"grader_test.h\"\nTEST_CASE(test_a) {\n}\nTEST_CASE( test_b ) {\n}\n";
+        assertThat(TestGenerationServiceImpl.countTests(Language.CPP, harness)).isEqualTo(2);
         assertThat(TestGenerationServiceImpl.countTests(Language.PYTHON, testFile("x", 3))).isEqualTo(3);
         assertThat(TestGenerationServiceImpl.countTests(Language.PYTHON, "")).isZero();
     }

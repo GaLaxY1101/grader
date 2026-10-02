@@ -115,10 +115,11 @@ public class PromptBuilder {
     private static String taskSummary(TaskSpec task) {
         Language language = task.language();
         String conventions = language == Language.PYTHON
-                ? "pytest file `test_solution.py` that starts with `from solution import *`."
-                : "`test.cpp` that does `#include \"" + language.getSolutionFileName() + "\"`, has one `void test_<name>()` "
-                        + "function per case printing `PASS test_<name>` or `FAIL test_<name>: expected <x> got <y>`, "
-                        + "and a `main()` returning the number of failures.";
+                ? "pytest file `test_solution.py` that starts with `from solution import *` and compares "
+                        + "results as `assert actual == expected`."
+                : "`test.cpp` that starts with `#include \"grader_test.h\"`, does `#include \""
+                        + language.getSolutionFileName() + "\"`, has one `TEST_CASE(test_<name>) { ... }` per case "
+                        + "using `EXPECT_EQ(expected, actual)` / `EXPECT_TRUE` / `EXPECT_NEAR`, and no `main()`.";
         return description(task) + "\n\nFunction under test:\n```" + signatureFence(language) + "\n"
                 + signature(task) + "\n```\n\nTest file: " + conventions;
     }

@@ -1,4 +1,4 @@
-image: gcc:latest
+image: gcc:13
 
 stages:
   - compile

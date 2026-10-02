@@ -1,6 +1,7 @@
 package ua.kpi.grader.course.dto;
 
 import jakarta.validation.constraints.NotNull;
+import ua.kpi.grader.course.entity.FeedbackLevel;
 import ua.kpi.grader.course.entity.Language;
 import ua.kpi.grader.course.entity.ProgrammingTask;
 import ua.kpi.grader.course.entity.TestMode;
@@ -12,7 +13,9 @@ public record ProgrammingTaskDetails(
         String functionSignature,
         String testFileContent,
         /** Teacher's correct solution. Optional; always null in responses for students. */
-        String referenceSolution
+        String referenceSolution,
+        /** How much per-test feedback students see. Optional in requests; defaults to FULL. */
+        FeedbackLevel feedbackLevel
 ) {
     /**
      * Maps a programming task to its DTO.
@@ -28,7 +31,8 @@ public record ProgrammingTaskDetails(
                 task.getCiConfigTemplate(),
                 task.getFunctionSignature(),
                 task.getTestFileContent(),
-                includeReferenceSolution ? task.getReferenceSolution() : null
+                includeReferenceSolution ? task.getReferenceSolution() : null,
+                task.getFeedbackLevel()
         );
     }
 }
