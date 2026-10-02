@@ -4,5 +4,5 @@ public record GitLabJobDto(
         Integer id,
         String name,
         String status,
-        Integer stage
+        String stage
 ) {}
