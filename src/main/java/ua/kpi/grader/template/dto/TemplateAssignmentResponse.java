@@ -1,7 +1,6 @@
 package ua.kpi.grader.template.dto;
 
 import ua.kpi.grader.course.dto.ProgrammingTaskDetails;
-import ua.kpi.grader.course.entity.AssignmentType;
 import ua.kpi.grader.template.entity.TemplateAssignment;
 import ua.kpi.grader.template.entity.TemplateProgrammingTask;
 
@@ -13,7 +12,7 @@ public record TemplateAssignmentResponse(
         String title,
         String description,
         Integer maxScore,
-        AssignmentType type,
+        boolean codeCheckEnabled,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
         ProgrammingTaskDetails programmingTask,
@@ -26,7 +25,7 @@ public record TemplateAssignmentResponse(
                 assignment.getTitle(),
                 assignment.getDescription(),
                 assignment.getMaxScore(),
-                assignment.getType(),
+                assignment.isCodeCheckEnabled(),
                 assignment.getCreatedAt(),
                 assignment.getUpdatedAt(),
                 toProgrammingTaskDetails(assignment.getProgrammingTask()),

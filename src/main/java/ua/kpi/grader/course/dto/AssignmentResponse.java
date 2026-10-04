@@ -1,7 +1,6 @@
 package ua.kpi.grader.course.dto;
 
 import ua.kpi.grader.course.entity.Assignment;
-import ua.kpi.grader.course.entity.AssignmentType;
 
 import java.time.OffsetDateTime;
 
@@ -13,7 +12,7 @@ public record AssignmentResponse(
         Integer maxScore,
         OffsetDateTime deadline,
         boolean isActive,
-        AssignmentType type,
+        boolean codeCheckEnabled,
         Long createdBy,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt,
@@ -35,7 +34,7 @@ public record AssignmentResponse(
                 assignment.getMaxScore(),
                 assignment.getDeadline(),
                 assignment.isActive(),
-                assignment.getType(),
+                assignment.isCodeCheckEnabled(),
                 assignment.getCreatedBy().getId(),
                 assignment.getCreatedAt(),
                 assignment.getUpdatedAt(),

@@ -60,20 +60,32 @@ public class GitLabSubmissionService {
 
             if (isFirstAttempt) {
                 Integer groupId = gitLabApiClient.getOrCreateGroup();
-                Integer newProjectId = gitLabApiClient.createProject(assignmentId, studentId, groupId);
-                submission.assignGitlabProject(newProjectId.longValue());
+                String projectPath = "assignment-%d-student-%d".formatted(assignmentId, studentId);
 
-                commitSha = gitLabApiClient.commitFiles(newProjectId,
+                // Reuse an orphan project left over from a prior run (e.g. local DB wiped but GitLab volume kept)
+                // instead of failing with 400 "has already been taken".
+                var existing = gitLabApiClient.findProjectByPath(properties.groupName(), projectPath);
+                Integer projectId;
+                boolean freshlyCreated;
+                if (existing.isPresent()) {
+                    projectId = existing.get();
+                    freshlyCreated = false;
+                    log.info("Reusing existing GitLab project id={} for submission id={}",
+                            projectId, submission.getId());
+                } else {
+                    projectId = gitLabApiClient.createProject(assignmentId, studentId, groupId);
+                    freshlyCreated = true;
+                }
+                submission.assignGitlabProject(projectId.longValue());
+
+                commitSha = gitLabApiClient.commitFiles(projectId,
                         "Initial submission (attempt %d)".formatted(attempt.getAttemptNumber()),
                         List.of(
-                                new FileAction("create", solutionFileName, attempt.getCodeContent()),
-                                new FileAction("create", testFileName, task.getTestFileContent()),
-                                new FileAction("create", harnessFileName, harnessContent),
-                                new FileAction("create", ".gitlab-ci.yml", ciYaml)
+                                fileAction(projectId, freshlyCreated, solutionFileName, attempt.getCodeContent()),
+                                fileAction(projectId, freshlyCreated, testFileName, task.getTestFileContent()),
+                                fileAction(projectId, freshlyCreated, harnessFileName, harnessContent),
+                                fileAction(projectId, freshlyCreated, ".gitlab-ci.yml", ciYaml)
                         ));
-
-                String webhookUrl = properties.webhookBaseUrl() + "/api/webhooks/gitlab";
-                gitLabApiClient.registerWebhook(newProjectId, webhookUrl);
             } else {
                 Integer existingProjectId = submission.getGitlabProjectId().intValue();
                 // Projects created before the harness existed do not have the file yet.
@@ -91,6 +103,13 @@ public class GitLabSubmissionService {
             }
 
             Integer projectId = submission.getGitlabProjectId().intValue();
+            // Ensure the webhook exists on every attempt. Covers reused orphan projects and
+            // submissions whose first attempt pre-dates this check.
+            String webhookUrl = properties.webhookBaseUrl() + "/api/webhooks/gitlab";
+            if (!gitLabApiClient.hasWebhook(projectId, webhookUrl)) {
+                gitLabApiClient.registerWebhook(projectId, webhookUrl);
+            }
+
             GitLabPipelineDto pipeline = gitLabApiClient.getPipelineForSha(projectId, commitSha);
 
             attempt.startPipeline(pipeline.id().longValue());
@@ -110,5 +129,10 @@ public class GitLabSubmissionService {
                     "GitLab API error: " + e.getMessage());
             submission.updateFromAttempt(attempt);
         }
+    }
+
+    private FileAction fileAction(Integer projectId, boolean freshlyCreated, String path, String content) {
+        String action = freshlyCreated || !gitLabApiClient.fileExists(projectId, path) ? "create" : "update";
+        return new FileAction(action, path, content);
     }
 }

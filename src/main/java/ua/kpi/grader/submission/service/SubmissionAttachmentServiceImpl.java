@@ -54,11 +54,6 @@ public class SubmissionAttachmentServiceImpl implements SubmissionAttachmentServ
         Assignment assignment = assignmentRepository.findByIdAndIsActiveTrue(assignmentId)
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Assignment not found with id: " + assignmentId));
-        if (!assignment.getType().supportsFiles()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Assignment does not accept file attachments");
-        }
-
         Student student = currentStudent();
         Submission submission = submissionAccess.getOrCreate(assignment, student);
         submission.initFileStateIfNeeded();

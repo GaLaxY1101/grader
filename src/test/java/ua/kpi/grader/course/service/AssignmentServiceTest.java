@@ -159,7 +159,7 @@ class AssignmentServiceTest {
     void createAssignment_persistsAndReturnsAssignment() {
         Course course = buildCourse(1L);
         Teacher teacher = buildTeacher(1L, 10L);
-        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null, null);
+        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null);
         Assignment saved = buildAssignment(7L, course, teacher);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
         when(currentUser.getEmail()).thenReturn("teacher10@test.com");
@@ -174,7 +174,7 @@ class AssignmentServiceTest {
 
     @Test
     void createAssignment_throwsResourceNotFoundException_whenCourseNotFound() {
-        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null, null);
+        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null);
         when(courseRepository.findById(99L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> assignmentService.createAssignment(99L, request))
@@ -185,7 +185,7 @@ class AssignmentServiceTest {
     @Test
     void createAssignment_throwsResourceNotFoundException_whenTeacherNotFound() {
         Course course = buildCourse(1L);
-        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null, null);
+        CreateAssignmentRequest request = new CreateAssignmentRequest("HW1", null, 50, null, null);
         when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
         when(currentUser.getEmail()).thenReturn("nobody@test.com");
         when(teacherRepository.findByUser_Email("nobody@test.com")).thenReturn(Optional.empty());

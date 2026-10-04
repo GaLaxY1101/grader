@@ -9,7 +9,6 @@ import ua.kpi.grader.course.dto.CreateAssignmentRequest;
 import ua.kpi.grader.course.dto.ProgrammingTaskDetails;
 import ua.kpi.grader.course.dto.UpdateAssignmentRequest;
 import ua.kpi.grader.course.entity.Assignment;
-import ua.kpi.grader.course.entity.AssignmentType;
 import ua.kpi.grader.course.entity.Course;
 import ua.kpi.grader.course.entity.FeedbackLevel;
 import ua.kpi.grader.course.entity.ProgrammingTask;
@@ -87,16 +86,13 @@ public class AssignmentServiceImpl implements AssignmentService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Teacher not found for user: " + email));
 
-        AssignmentType type = request.type() != null ? request.type() : AssignmentType.CODE;
-        validateTypeCompatibility(type, request.programmingTask());
-
         Assignment assignment = Assignment.builder()
                 .course(course)
                 .title(request.title())
                 .description(request.description())
                 .maxScore(request.maxScore() != null ? request.maxScore() : 100)
                 .deadline(toOffsetDateTime(request.deadline()))
-                .type(type)
+                .codeCheckEnabled(request.programmingTask() != null)
                 .createdBy(teacher)
                 .build();
 
@@ -105,12 +101,6 @@ public class AssignmentServiceImpl implements AssignmentService {
         }
 
         return AssignmentResponse.from(assignmentRepository.save(assignment), currentUser.isStaff());
-    }
-
-    private void validateTypeCompatibility(AssignmentType type, ProgrammingTaskDetails programmingTask) {
-        if (type == AssignmentType.FILE && programmingTask != null) {
-            throw new IllegalArgumentException("FILE assignments cannot include a programming task");
-        }
     }
 
     /**
@@ -138,7 +128,6 @@ public class AssignmentServiceImpl implements AssignmentService {
 
         ProgrammingTaskDetails incoming = request.programmingTask();
         ProgrammingTask existing = assignment.getProgrammingTask();
-        validateTypeCompatibility(assignment.getType(), incoming);
 
         if (incoming != null && existing == null) {
             assignment.setProgrammingTask(buildProgrammingTask(assignment, incoming));

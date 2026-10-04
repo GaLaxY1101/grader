@@ -44,10 +44,9 @@ public class Assignment {
     @Builder.Default
     private boolean isActive = true;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(name = "code_check_enabled", nullable = false)
     @Builder.Default
-    private AssignmentType type = AssignmentType.CODE;
+    private boolean codeCheckEnabled = false;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false,

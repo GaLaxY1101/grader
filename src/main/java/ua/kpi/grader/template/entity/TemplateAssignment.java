@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
-import ua.kpi.grader.course.entity.AssignmentType;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -37,10 +36,9 @@ public class TemplateAssignment {
     @Builder.Default
     private Integer maxScore = 100;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(name = "code_check_enabled", nullable = false)
     @Builder.Default
-    private AssignmentType type = AssignmentType.CODE;
+    private boolean codeCheckEnabled = false;
 
     @Setter
     @OneToOne(mappedBy = "assignment", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)

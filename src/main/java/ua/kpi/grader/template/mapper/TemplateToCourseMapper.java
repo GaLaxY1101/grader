@@ -22,7 +22,7 @@ public class TemplateToCourseMapper {
                 .title(source.getTitle())
                 .description(source.getDescription())
                 .maxScore(source.getMaxScore())
-                .type(source.getType())
+                .codeCheckEnabled(source.isCodeCheckEnabled())
                 .createdBy(createdBy)
                 .build();
 

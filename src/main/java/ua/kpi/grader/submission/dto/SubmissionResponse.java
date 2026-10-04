@@ -1,6 +1,5 @@
 package ua.kpi.grader.submission.dto;
 
-import ua.kpi.grader.course.entity.AssignmentType;
 import ua.kpi.grader.submission.entity.Submission;
 import ua.kpi.grader.submission.entity.SubmissionFileState;
 import ua.kpi.grader.submission.entity.SubmissionStatus;
@@ -10,7 +9,7 @@ import java.time.OffsetDateTime;
 public record SubmissionResponse(
         Long id,
         Long assignmentId,
-        AssignmentType assignmentType,
+        boolean codeCheckEnabled,
         Long studentId,
         String studentEmail,
         SubmissionStatus status,
@@ -31,7 +30,7 @@ public record SubmissionResponse(
         return new SubmissionResponse(
                 submission.getId(),
                 submission.getAssignment().getId(),
-                submission.getAssignment().getType(),
+                submission.getAssignment().isCodeCheckEnabled(),
                 submission.getStudent().getId(),
                 submission.getStudent().getUser().getEmail(),
                 submission.getStatus(),

@@ -230,7 +230,7 @@ public class SubmissionServiceImpl implements SubmissionService {
             }
         }
         submission.assignGrade(newGrade);
-        if (newGrade != null && submission.getAssignment().getType().supportsFiles()) {
+        if (newGrade != null) {
             submission.markGradedIfFileWorkflow();
         }
         return SubmissionResponse.from(submission);

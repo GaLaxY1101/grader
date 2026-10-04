@@ -12,6 +12,7 @@ import ua.kpi.grader.gitlab.config.GitLabProperties;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -86,6 +87,29 @@ public class GitLabApiClient {
     }
 
     // ── Projects ──────────────────────────────────────────────
+
+    /**
+     * Look up an existing project by its full path (group/project).
+     * Returns empty when GitLab responds with 404.
+     *
+     * @param groupPath   the group path (namespace)
+     * @param projectPath the project path within the group
+     * @return the project id if the project already exists
+     */
+    public Optional<Integer> findProjectByPath(String groupPath, String projectPath) {
+        String fullPath = groupPath + "/" + projectPath;
+        log.debug("Looking up GitLab project by path '{}'", fullPath);
+        try {
+            Map<String, Object> body = restClient.get()
+                    .uri("/projects/{fullPath}", fullPath)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {});
+            Integer id = body != null ? (Integer) body.get("id") : null;
+            return Optional.ofNullable(id);
+        } catch (HttpClientErrorException.NotFound e) {
+            return Optional.empty();
+        }
+    }
 
     /**
      * Create a new private GitLab project for a student-assignment pair.
@@ -211,6 +235,25 @@ public class GitLabApiClient {
                 .body(body)
                 .retrieve()
                 .toBodilessEntity();
+    }
+
+    /**
+     * Returns true when a project already has a hook pointing at the given URL.
+     * Used to make webhook registration idempotent when reusing an existing GitLab project.
+     *
+     * @param projectId  the GitLab project id
+     * @param webhookUrl the webhook URL to look for
+     * @return true if a hook with the given URL exists on the project
+     */
+    public boolean hasWebhook(Integer projectId, String webhookUrl) {
+        List<Map<String, Object>> hooks = restClient.get()
+                .uri("/projects/{projectId}/hooks", projectId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        if (hooks == null) {
+            return false;
+        }
+        return hooks.stream().anyMatch(h -> webhookUrl.equals(h.get("url")));
     }
 
     // ── Pipelines ─────────────────────────────────────────────

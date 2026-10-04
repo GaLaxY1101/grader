@@ -5,7 +5,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import ua.kpi.grader.common.exception.ResourceNotFoundException;
 import ua.kpi.grader.course.dto.ProgrammingTaskDetails;
-import ua.kpi.grader.course.entity.AssignmentType;
 import ua.kpi.grader.template.dto.CreateTemplateAssignmentRequest;
 import ua.kpi.grader.template.dto.TemplateAssignmentResponse;
 import ua.kpi.grader.template.dto.UpdateTemplateAssignmentRequest;
@@ -47,25 +46,17 @@ public class TemplateAssignmentServiceImpl implements TemplateAssignmentService 
     public TemplateAssignmentResponse createAssignment(Long templateId,
                                                        CreateTemplateAssignmentRequest request) {
         CourseTemplate template = access.requireEdit(templateId);
-        AssignmentType type = request.type() != null ? request.type() : AssignmentType.CODE;
-        validateTypeCompatibility(type, request.programmingTask());
         TemplateAssignment assignment = TemplateAssignment.builder()
                 .template(template)
                 .title(request.title())
                 .description(request.description())
                 .maxScore(request.maxScore() != null ? request.maxScore() : 100)
-                .type(type)
+                .codeCheckEnabled(request.programmingTask() != null)
                 .build();
         if (request.programmingTask() != null) {
             assignment.setProgrammingTask(mapper.buildProgrammingTask(assignment, request.programmingTask()));
         }
         return TemplateAssignmentResponse.from(assignmentRepository.save(assignment));
-    }
-
-    private void validateTypeCompatibility(AssignmentType type, ProgrammingTaskDetails programmingTask) {
-        if (type == AssignmentType.FILE && programmingTask != null) {
-            throw new IllegalArgumentException("FILE assignments cannot include a programming task");
-        }
     }
 
     @Override
@@ -78,7 +69,6 @@ public class TemplateAssignmentServiceImpl implements TemplateAssignmentService 
 
         ProgrammingTaskDetails incoming = request.programmingTask();
         TemplateProgrammingTask existing = assignment.getProgrammingTask();
-        validateTypeCompatibility(assignment.getType(), incoming);
 
         if (incoming != null && existing == null) {
             assignment.setProgrammingTask(mapper.buildProgrammingTask(assignment, incoming));
