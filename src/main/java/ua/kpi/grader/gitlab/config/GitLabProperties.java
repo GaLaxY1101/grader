@@ -8,6 +8,5 @@ public record GitLabProperties(
         String token,
         String groupName,
         String webhookSecret,
-        String runnerToken,
         String webhookBaseUrl
 ) {}

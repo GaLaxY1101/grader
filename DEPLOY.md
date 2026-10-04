@@ -46,7 +46,7 @@ browser ──► frontend :3000 ──(server side)──► backend :8080 ─�
      final name now (see "Changing PUBLIC_HOST later").
    - Replace every `change-me`. Generate values with `openssl rand -hex 32`. Hex avoids
      characters like `/`, `+` and `=`, which break the sed/URL edits some people do later.
-   - Leave `GITLAB_TOKEN` / `GITLAB_RUNNER_TOKEN` empty for now.
+   - Leave `GITLAB_TOKEN` empty for now.
 
 3. **Start**
    ```bash
@@ -84,26 +84,52 @@ browser ──► frontend :3000 ──(server side)──► backend :8080 ─�
    as `root`. The password is in `docker compose -f compose.server.yaml exec gitlab cat /etc/gitlab/initial_root_password`,
    and the file is deleted after 24 h. Then go to User settings → Access tokens.
 
-   b. Create an instance runner and register it:
+   b. Put `TOKEN` into `.env` as `GITLAB_TOKEN`, then start the backend so it creates the
+   `grader` group:
    ```bash
-   RUNNER_TOKEN=$(curl -s -X POST -H "PRIVATE-TOKEN: $TOKEN" \
-     http://localhost:8929/api/v4/user/runners -d runner_type=instance_type -d run_untagged=true \
-     | sed 's/.*"token":"\([^"]*\)".*/\1/')
+   docker compose -f compose.server.yaml up -d backend
+   ```
+   The backend log should end with `GitLab ready — group 'grader' id=<N>`. Capture that ID —
+   step c needs it. If you missed the log line, grab it from the API:
+   ```bash
+   GROUP_ID=$(curl -s -H "PRIVATE-TOKEN: $TOKEN" \
+     "http://localhost:8929/api/v4/groups?search=grader" \
+     | sed 's/.*"id":\([0-9]*\),"web_url".*/\1/')
+   ```
 
-   docker compose -f compose.server.yaml exec gitlab-runner gitlab-runner register \
-     --non-interactive --url http://gitlab:8929 --clone-url http://gitlab:8929 \
-     --token "$RUNNER_TOKEN" --executor docker --docker-image alpine:latest \
-     --docker-network-mode grader-server_default
+   c. Register two **group** runners scoped to `grader` (adjust the loop count to run more
+   graded submissions in parallel):
+   ```bash
+   for i in 1 2; do
+     RUNNER_TOKEN=$(curl -s -X POST -H "PRIVATE-TOKEN: $TOKEN" \
+       http://localhost:8929/api/v4/user/runners \
+       -d runner_type=group_type -d "group_id=$GROUP_ID" \
+       -d run_untagged=true -d "description=grader-group-$i" \
+       | sed 's/.*"token":"\([^"]*\)".*/\1/')
+
+     docker compose -f compose.server.yaml exec gitlab-runner gitlab-runner register \
+       --non-interactive --url http://gitlab:8929 --clone-url http://gitlab:8929 \
+       --token "$RUNNER_TOKEN" --executor docker --docker-image alpine:latest \
+       --docker-network-mode grader-server_default \
+       --description "grader-group-$i"
+   done
    ```
    `--clone-url` is required. Without it, CI jobs clone from GitLab's external URL, and inside
    the job container that URL may not resolve: with `PUBLIC_HOST=localhost` it points at the
    job container itself (`Failed to connect to localhost port 8929`).
 
-   c. Put `TOKEN` into `.env` as `GITLAB_TOKEN` and `RUNNER_TOKEN` as `GITLAB_RUNNER_TOKEN`, then:
+   d. Raise the runner process's concurrency cap so both runners actually grade in parallel.
+   The top-level `concurrent` key in `/etc/gitlab-runner/config.toml` caps simultaneous jobs
+   across **all** registered runners (default `1`); set it `>=` the number of runners:
    ```bash
-   docker compose -f compose.server.yaml up -d backend
+   docker compose -f compose.server.yaml exec gitlab-runner \
+     sed -i 's/^concurrent = .*/concurrent = 2/' /etc/gitlab-runner/config.toml
+   docker compose -f compose.server.yaml restart gitlab-runner
    ```
-   The backend log should end with `GitLab ready — group 'grader' id=...`.
+   Verify with `docker compose -f compose.server.yaml exec gitlab-runner gitlab-runner list`:
+   two runners should appear, both with `URL=http://gitlab:8929`.
+
+   To add another runner later, repeat step c with a fresh `i` and bump `concurrent` to match.
 
 6. **Smoke test.** As a teacher, create a Python assignment with *Enable Code Check* and a
    reference solution plus tests. As `student@grader.ua`, submit a solution. Within about a
