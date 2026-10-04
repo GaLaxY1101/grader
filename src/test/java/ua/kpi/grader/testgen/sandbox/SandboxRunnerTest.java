@@ -26,7 +26,10 @@ class SandboxRunnerTest {
 
     private static SandboxRunner runner(int timeoutSeconds) {
         TestGenProperties properties = new TestGenProperties(
+                TestGenProperties.Provider.OLLAMA,
                 new TestGenProperties.Ollama("http://localhost:11434", "qwen2.5-coder:3b", 180, "30m", 8192),
+                new TestGenProperties.Gemini("https://generativelanguage.googleapis.com",
+                        "test-key", "gemini-2.0-flash", 60, 8192, 0),
                 0.2, 3, 5, true, 10, true,
                 new TestGenProperties.Sandbox("grader-sandbox-cpp:1", "grader-sandbox-py:1",
                         timeoutSeconds, 5, "256m", "1"));

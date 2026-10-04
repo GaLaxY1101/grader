@@ -12,9 +12,10 @@ import ua.kpi.grader.course.entity.Language;
 import ua.kpi.grader.course.repository.AssignmentRepository;
 import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.testgen.client.ChatMessage;
+import ua.kpi.grader.testgen.client.LlmClient;
 import ua.kpi.grader.testgen.client.LlmResponse;
+import ua.kpi.grader.testgen.client.LlmResponseParser;
 import ua.kpi.grader.testgen.client.LlmUnavailableException;
-import ua.kpi.grader.testgen.client.OllamaClient;
 import ua.kpi.grader.testgen.config.TestGenProperties;
 import ua.kpi.grader.testgen.dto.IterationResponse;
 import ua.kpi.grader.testgen.dto.StartTestGenerationRequest;
@@ -83,7 +84,7 @@ public class TestGenerationServiceImpl implements TestGenerationService {
     private static final Pattern PY_IMPORTS_PYTEST =
             Pattern.compile("(?m)^\\s*(import\\s+pytest\\b|from\\s+pytest\\s+import)");
 
-    private final OllamaClient ollamaClient;
+    private final LlmClient llmClient;
     private final SandboxRunner sandboxRunner;
     private final MutantPoolBuilder mutantPoolBuilder;
     private final PromptBuilder promptBuilder;
@@ -264,9 +265,9 @@ public class TestGenerationServiceImpl implements TestGenerationService {
 
         // Iteration 0: initial generation.
         long iterationStart = System.nanoTime();
-        LlmResponse response = ollamaClient.chat(config.model(), messages(systemPrompt, generatePrompt),
+        LlmResponse response = llmClient.chat(config.model(), messages(systemPrompt, generatePrompt),
                 config.temperature(), config.seed());
-        String tests = normalize(language, OllamaClient.extractCode(response.content()));
+        String tests = normalize(language, LlmResponseParser.extractCode(response.content()));
         Evaluation current = evaluate(request, tests, pool);
         record(iterations, listener, 0, PromptType.GENERATE, generatePrompt, response, tests, null,
                 current, countTests(language, tests), true, config.temperature(), iterationStart);
@@ -302,8 +303,8 @@ public class TestGenerationServiceImpl implements TestGenerationService {
             double temperature = Math.round(100 * Math.min(MAX_TEMPERATURE,
                     config.temperature() + stagnation * STAGNATION_TEMPERATURE_STEP)) / 100.0;
             iterationStart = System.nanoTime();
-            response = ollamaClient.chat(config.model(), messages(systemPrompt, prompt), temperature, config.seed());
-            String candidate = normalize(language, OllamaClient.extractCode(response.content()));
+            response = llmClient.chat(config.model(), messages(systemPrompt, prompt), temperature, config.seed());
+            String candidate = normalize(language, LlmResponseParser.extractCode(response.content()));
             Evaluation candidateEval = evaluate(request, candidate, pool);
             int candidateCount = countTests(language, candidate);
             int currentCount = countTests(language, tests);

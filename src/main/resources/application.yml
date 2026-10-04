@@ -95,12 +95,20 @@ minio:
   presign-ttl-seconds: ${MINIO_PRESIGN_TTL:300}
 
 testgen:
+  provider: ${TESTGEN_PROVIDER:gemini}
   ollama:
     base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
-    model: ${TESTGEN_MODEL:qwen2.5-coder:3b}
+    model: ${OLLAMA_MODEL:qwen2.5-coder:3b}
     timeout-seconds: 180
     keep-alive: 30m
     num-ctx: 8192
+  gemini:
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+    api-key: ${GEMINI_API_KEY:}
+    model: ${TESTGEN_MODEL:gemini-3.8-flash}
+    timeout-seconds: 60
+    max-output-tokens: 8192
+    thinking-budget: ${GEMINI_THINKING_BUDGET:0}
   temperature: 0.2
   max-iterations: 3
   min-test-count: 5

@@ -62,15 +62,36 @@ Keep their compose project names different (`grader` vs `grader-server`).
 - At minimum test: happy path + not found case + validation error case
 
 ## AI Test Generation
-Teachers can generate unit tests with a locally hosted LLM; generated tests are validated by
-running them in Docker sandboxes (see `docs/ai-testgen/` in the monorepo root). Code lives in
-package `ua.kpi.grader.testgen`.
+Teachers can generate unit tests with an LLM; generated tests are validated by running them in
+Docker sandboxes (see `docs/ai-testgen/` in the monorepo root). Code lives in package
+`ua.kpi.grader.testgen`.
 
-### Ollama (required)
+### Provider switch
+`testgen.provider` picks the LLM backend. Two `LlmClient` beans (`GeminiClient`, `OllamaClient`)
+are guarded by `@ConditionalOnProperty`, so exactly one is active per boot.
+
+| Provider | When to use | Required env |
+|---|---|---|
+| `gemini` (default) | Production + anywhere without a GPU | `GEMINI_API_KEY` |
+| `ollama` | Local dev with a GPU, offline runs, thesis baseline | Running Ollama server + pulled model |
+
+Switch via `TESTGEN_PROVIDER=gemini|ollama` in `.env`. Model tag goes in `TESTGEN_MODEL`
+(defaults: `gemini-3.8-flash` for gemini, `qwen2.5-coder:3b` for ollama via `OLLAMA_MODEL`).
+
+### Gemini (default)
+- Create an API key at https://aistudio.google.com/apikey and put it in `.env` as `GEMINI_API_KEY`.
+- Free tier: `gemini-2.0-flash` ≈ 15 RPM / 1500 RPD; `gemini-3.8-flash` ≈ 10 RPM / 500 RPD.
+- `GEMINI_THINKING_BUDGET` (2.5 only; `0` disables thinking for fastest responses).
+- No local resources; the backend reaches `generativelanguage.googleapis.com` on `:443` outbound.
+- No native `seed` parameter — reproducibility relies on temperature + the stagnation heuristic.
+
+### Ollama (opt-in)
 - Install from https://ollama.com and keep it running (`ollama serve`, default port 11434).
 - Pull the configured model once: `ollama pull qwen2.5-coder:3b`
-  (3b chosen for a 6 GB GPU; use `qwen2.5-coder:7b` with >= 8 GB VRAM via `TESTGEN_MODEL`).
+  (3b chosen for a 6 GB GPU; use `qwen2.5-coder:7b` with >= 8 GB VRAM via `OLLAMA_MODEL`).
 - Smoke test: `curl http://localhost:11434/api/chat -d '{"model":"qwen2.5-coder:3b","stream":false,"messages":[{"role":"user","content":"hi"}]}'`
+- On the server stack, Ollama services sit behind the `ollama` Compose profile:
+  `docker compose -f compose.server.yaml --profile ollama up -d --build`.
 
 ### Sandbox images
 Generated tests run in `docker run --rm --network none ...`, so all tooling is baked into the images.
@@ -104,9 +125,16 @@ Generated tests run in `docker run --rm --network none ...`, so all tooling is b
 ### Configuration (`testgen.*` in application.yml)
 | Property | Default | Meaning |
 |---|---|---|
+| `testgen.provider` | `${TESTGEN_PROVIDER:gemini}` | Active LLM backend: `gemini` or `ollama` |
+| `testgen.gemini.base-url` | `${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}` | Gemini API base URL |
+| `testgen.gemini.api-key` | `${GEMINI_API_KEY:}` | Google AI Studio key; required when provider is `gemini` |
+| `testgen.gemini.model` | `${TESTGEN_MODEL:gemini-3.8-flash}` | Gemini model tag |
+| `testgen.gemini.timeout-seconds` | `60` | HTTP timeout for one Gemini call |
+| `testgen.gemini.max-output-tokens` | `8192` | Upper bound on tokens generated per call |
+| `testgen.gemini.thinking-budget` | `${GEMINI_THINKING_BUDGET:0}` | 2.5 only; `0` disables thinking |
 | `testgen.ollama.base-url` | `${OLLAMA_BASE_URL:http://localhost:11434}` | Ollama server URL |
-| `testgen.ollama.model` | `${TESTGEN_MODEL:qwen2.5-coder:3b}` | Model used for generation |
-| `testgen.ollama.timeout-seconds` | `180` | HTTP timeout for one LLM call |
+| `testgen.ollama.model` | `${OLLAMA_MODEL:qwen2.5-coder:3b}` | Ollama model tag |
+| `testgen.ollama.timeout-seconds` | `180` | HTTP timeout for one Ollama call |
 | `testgen.ollama.keep-alive` | `30m` | How long Ollama keeps the model loaded (avoids ~90 s cold loads) |
 | `testgen.ollama.num-ctx` | `8192` | Context window; repair prompts carry conversation history |
 | `testgen.temperature` | `0.2` | Sampling temperature |

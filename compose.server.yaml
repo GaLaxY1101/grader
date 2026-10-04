@@ -104,8 +104,13 @@ services:
       - gitlab
 
   # ── AI test generation ─────────────────────────────────────
+  # Default provider is Gemini (hosted); the local Ollama services below are
+  # opt-in via the `ollama` Compose profile and only used when
+  # TESTGEN_PROVIDER=ollama. Start them with:
+  #   docker compose -f compose.server.yaml --profile ollama up -d --build
 
   ollama:
+    profiles: ["ollama"]
     image: ollama/ollama:latest
     restart: unless-stopped
     volumes:
@@ -118,9 +123,10 @@ services:
 
   # One-shot: downloads the model into the ollama volume (no-op when already present).
   ollama-pull:
+    profiles: ["ollama"]
     image: ollama/ollama:latest
     entrypoint: ["ollama"]
-    command: ["pull", "${TESTGEN_MODEL:-qwen2.5-coder:3b}"]
+    command: ["pull", "${OLLAMA_MODEL:-qwen2.5-coder:3b}"]
     environment:
       OLLAMA_HOST: http://ollama:11434
     depends_on:
@@ -169,8 +175,11 @@ services:
       GITLAB_WEBHOOK_BASE_URL: http://backend:8080
       MINIO_ENDPOINT: http://s3:9090
       MINIO_PUBLIC_ENDPOINT: http://${PUBLIC_HOST}:${S3_PORT:-9000}
+      TESTGEN_PROVIDER: ${TESTGEN_PROVIDER:-gemini}
+      TESTGEN_MODEL: ${TESTGEN_MODEL:-gemini-3.8-flash}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OLLAMA_BASE_URL: http://ollama:11434
-      TESTGEN_MODEL: ${TESTGEN_MODEL:-qwen2.5-coder:3b}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5-coder:3b}
     volumes:
       # Lets the backend start sandbox containers on the host daemon (see DEPLOY.md, Security).
       - /var/run/docker.sock:/var/run/docker.sock
@@ -183,8 +192,6 @@ services:
         condition: service_healthy
       s3:
         condition: service_started
-      ollama-pull:
-        condition: service_completed_successfully
       sandbox-cpp:
         condition: service_completed_successfully
       sandbox-python:

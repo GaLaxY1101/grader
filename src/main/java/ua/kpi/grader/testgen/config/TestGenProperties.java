@@ -5,6 +5,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /**
  * Settings for AI test generation, bound from {@code testgen.*} in application.yml.
  *
+ * @param provider         active LLM backend; selects which client bean the context registers
+ * @param ollama           settings for the local Ollama backend (used when {@code provider = OLLAMA})
+ * @param gemini           settings for the hosted Google Gemini API (used when {@code provider = GEMINI})
  * @param temperature      default sampling temperature
  * @param maxIterations    maximum self-repair iterations (0 = single-shot)
  * @param minTestCount     minimum number of tests a generated file must keep
@@ -14,7 +17,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  */
 @ConfigurationProperties(prefix = "testgen")
 public record TestGenProperties(
+        Provider provider,
         Ollama ollama,
+        Gemini gemini,
         double temperature,
         int maxIterations,
         int minTestCount,
@@ -23,6 +28,18 @@ public record TestGenProperties(
         boolean pruneFailing,
         Sandbox sandbox
 ) {
+
+    /** Active LLM backend. */
+    public enum Provider {
+        OLLAMA, GEMINI
+    }
+
+    /**
+     * Default model tag for the active provider. Used when a job does not override it.
+     */
+    public String defaultModel() {
+        return provider == Provider.GEMINI ? gemini.model() : ollama.model();
+    }
 
     /**
      * @param baseUrl        Ollama server URL
@@ -37,6 +54,24 @@ public record TestGenProperties(
             int timeoutSeconds,
             String keepAlive,
             int numCtx
+    ) {}
+
+    /**
+     * @param baseUrl         Gemini API base URL ({@code https://generativelanguage.googleapis.com})
+     * @param apiKey          Google AI Studio API key; must be set when {@code provider = GEMINI}
+     * @param model           model tag, e.g. {@code gemini-2.0-flash}
+     * @param timeoutSeconds  read timeout for one chat call
+     * @param maxOutputTokens upper bound on tokens generated per call
+     * @param thinkingBudget  tokens the model may spend on reasoning before answering;
+     *                        {@code 0} disables thinking (fastest), ignored by non-thinking models
+     */
+    public record Gemini(
+            String baseUrl,
+            String apiKey,
+            String model,
+            int timeoutSeconds,
+            int maxOutputTokens,
+            int thinkingBudget
     ) {}
 
     /**

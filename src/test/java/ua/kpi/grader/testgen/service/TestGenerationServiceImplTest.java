@@ -16,9 +16,9 @@ import ua.kpi.grader.course.entity.Language;
 import ua.kpi.grader.course.repository.AssignmentRepository;
 import ua.kpi.grader.security.CurrentUser;
 import ua.kpi.grader.testgen.client.ChatMessage;
+import ua.kpi.grader.testgen.client.LlmClient;
 import ua.kpi.grader.testgen.client.LlmResponse;
 import ua.kpi.grader.testgen.client.LlmUnavailableException;
-import ua.kpi.grader.testgen.client.OllamaClient;
 import ua.kpi.grader.testgen.config.TestGenProperties;
 import ua.kpi.grader.testgen.dto.GenerationOverrides;
 import ua.kpi.grader.testgen.dto.StartTestGenerationRequest;
@@ -67,7 +67,7 @@ class TestGenerationServiceImplTest {
     private static final Mutant MUTANT_B = new Mutant("M2", MutationOperator.RETURN_VALUE, 2,
             "def add(a, b):\n    return 0\n", "-    return a + b\n+    return 0\n");
 
-    @Mock private OllamaClient ollamaClient;
+    @Mock private LlmClient llmClient;
     @Mock private SandboxRunner sandboxRunner;
     @Mock private MutantPoolBuilder mutantPoolBuilder;
     @Mock private TestGenerationJobRepository jobRepository;
@@ -86,10 +86,13 @@ class TestGenerationServiceImplTest {
     @BeforeEach
     void setUp() {
         TestGenProperties properties = new TestGenProperties(
+                TestGenProperties.Provider.OLLAMA,
                 new TestGenProperties.Ollama("http://localhost:11434", "qwen2.5-coder:3b", 180, "30m", 8192),
+                new TestGenProperties.Gemini("https://generativelanguage.googleapis.com",
+                        "test-key", "gemini-2.0-flash", 60, 8192, 0),
                 0.2, 3, 5, true, 10, true,
                 new TestGenProperties.Sandbox("cpp:1", "py:1", 20, 5, "256m", "1"));
-        service = new TestGenerationServiceImpl(ollamaClient, sandboxRunner, mutantPoolBuilder, new PromptBuilder(),
+        service = new TestGenerationServiceImpl(llmClient, sandboxRunner, mutantPoolBuilder, new PromptBuilder(),
                 jobRepository, iterationRepository, assignmentRepository, currentUser, properties, worker,
                 JsonMapper.builder().build());
 
@@ -117,7 +120,7 @@ class TestGenerationServiceImplTest {
         assertThat(outcome.iterations()).hasSize(1);
         assertThat(outcome.iterations().getFirst().promptType()).isEqualTo(PromptType.GENERATE);
         assertThat(outcome.iterations().getFirst().coveragePct()).isEqualTo(100.0);
-        verify(ollamaClient, times(1)).chat(anyString(), anyList(), anyDouble(), any());
+        verify(llmClient, times(1)).chat(anyString(), anyList(), anyDouble(), any());
     }
 
     @Test
@@ -266,7 +269,7 @@ class TestGenerationServiceImplTest {
         assertThat(outcome.success()).isFalse();
         assertThat(outcome.lastTestContent()).isEqualTo(wrong);
         assertThat(outcome.iterations()).hasSize(1);
-        verify(ollamaClient, times(1)).chat(anyString(), anyList(), anyDouble(), any());
+        verify(llmClient, times(1)).chat(anyString(), anyList(), anyDouble(), any());
     }
 
     @Test
@@ -293,7 +296,7 @@ class TestGenerationServiceImplTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<ChatMessage>> captor = ArgumentCaptor.forClass(List.class);
-        verify(ollamaClient, times(2)).chat(anyString(), captor.capture(), anyDouble(), any());
+        verify(llmClient, times(2)).chat(anyString(), captor.capture(), anyDouble(), any());
         List<ChatMessage> repair = captor.getAllValues().get(1);
         assertThat(repair).extracting(ChatMessage::role).containsExactly("system", "user");
         assertThat(repair.get(1).content()).contains("## Task", "Add two numbers.", "# a");
@@ -332,7 +335,7 @@ class TestGenerationServiceImplTest {
         assertThat(last.accepted()).isTrue();
         assertThat(last.temperature()).isNull();
         assertThat(last.feedback()).contains("test_wrong_0");
-        verify(ollamaClient, times(4)).chat(anyString(), anyList(), anyDouble(), any());
+        verify(llmClient, times(4)).chat(anyString(), anyList(), anyDouble(), any());
     }
 
     @Test
@@ -394,7 +397,7 @@ class TestGenerationServiceImplTest {
     void startJob_marksJobFailed_whenLlmUnavailable() {
         when(currentUser.getUserId()).thenReturn("teacher-1");
         List<TestGenerationJob> saved = stubJobPersistence();
-        when(ollamaClient.chat(anyString(), anyList(), anyDouble(), any()))
+        when(llmClient.chat(anyString(), anyList(), anyDouble(), any()))
                 .thenThrow(new LlmUnavailableException("LLM server not reachable", null));
 
         service.startJob(startRequest(null));
@@ -511,7 +514,7 @@ class TestGenerationServiceImplTest {
         for (String t : testFiles) {
             responses.add(new LlmResponse("```python\n" + t + "```", "qwen2.5-coder:3b", 100, 200, 10));
         }
-        var stub = when(ollamaClient.chat(anyString(), anyList(), anyDouble(), any()));
+        var stub = when(llmClient.chat(anyString(), anyList(), anyDouble(), any()));
         stub.thenReturn(responses.getFirst(), responses.subList(1, responses.size()).toArray(LlmResponse[]::new));
     }
 

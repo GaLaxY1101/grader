@@ -7,7 +7,7 @@ import ua.kpi.grader.testgen.dto.GenerationOverrides;
  * Effective settings of one generation run (defaults from {@code testgen.*} plus overrides).
  * Stored as JSON in {@code test_generation_jobs.config}.
  *
- * @param model            Ollama model tag
+ * @param model            model tag of the active provider (Ollama or Gemini)
  * @param maxIterations    repair iterations after the initial generation; 0 = single-shot baseline
  * @param mutationFeedback whether surviving feedback-set mutants are sent to the LLM
  * @param temperature      sampling temperature
@@ -32,7 +32,7 @@ public record GenerationConfig(
      */
     public static GenerationConfig defaults(TestGenProperties properties) {
         return new GenerationConfig(
-                properties.ollama().model(),
+                properties.defaultModel(),
                 properties.maxIterations(),
                 properties.mutationFeedback(),
                 properties.temperature(),
