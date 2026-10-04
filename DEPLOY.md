@@ -131,7 +131,19 @@ browser ──► frontend :3000 ──(server side)──► backend :8080 ─�
 
    To add another runner later, repeat step c with a fresh `i` and bump `concurrent` to match.
 
-6. **Smoke test.** As a teacher, create a Python assignment with *Enable Code Check* and a
+6. **Configure SMTP (optional, re-run after changing `.env`).** The realm JSON imports SMTP
+   host/user/from on first boot only, and never ships the SMTP password in plaintext. The
+   `keycloak-config` one-shot pushes the password into the live realm and sets an email on the
+   master-realm `admin` user so Keycloak's *Test connection* button has a recipient. Set
+   `KEYCLOAK_ADMIN_EMAIL` and `SMTP_PASSWORD` in `.env`, then run it manually:
+   ```bash
+   docker compose -f compose.server.yaml run --rm keycloak-config
+   ```
+   Each step is skipped when its variable is empty, so this is safe to re-run (for example after
+   rotating the SMTP password). Verify in Keycloak admin console → realm `university-grader` →
+   Realm settings → Email → *Test connection*.
+
+7. **Smoke test.** As a teacher, create a Python assignment with *Enable Code Check* and a
    reference solution plus tests. As `student@grader.ua`, submit a solution. Within about a
    minute the attempt should show `Passed` with per-test results.
 

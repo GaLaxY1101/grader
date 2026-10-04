@@ -26,6 +26,24 @@ services:
       retries: 15
       start_period: 30s
 
+  # One-shot: sets email on master 'admin' + pushes SMTP password into realm.
+  # Each step skipped when its env var is empty. See deploy/keycloak/configure-admin.sh.
+  keycloak-config:
+    image: 'quay.io/keycloak/keycloak:26.0'
+    entrypoint: ["/bin/sh", "/configure-admin.sh"]
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_EMAIL: ${KEYCLOAK_ADMIN_EMAIL:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    volumes:
+      - ./deploy/keycloak/configure-admin.sh:/configure-admin.sh:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    restart: "no"
+
   gitlab:
     image: gitlab/gitlab-ce:16.9.1-ce.0
     container_name: grader-gitlab

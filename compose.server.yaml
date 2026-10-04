@@ -62,6 +62,24 @@ services:
       retries: 30
       start_period: 30s
 
+  # One-shot: sets email on the master-realm bootstrap admin so SMTP "Test connection" works.
+  keycloak-config:
+    image: quay.io/keycloak/keycloak:26.0
+    entrypoint: ["/bin/sh", "/configure-admin.sh"]
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_ADMIN_USERNAME: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Both optional; the script skips any step whose value is empty.
+      KEYCLOAK_ADMIN_EMAIL: ${KEYCLOAK_ADMIN_EMAIL:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    volumes:
+      - ./deploy/keycloak/configure-admin.sh:/configure-admin.sh:ro
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    restart: "no"
+
   s3:
     image: adobe/s3mock:latest
     restart: unless-stopped
