@@ -17,4 +17,12 @@ public enum SubmissionFileState {
     public boolean isEditable() {
         return this == DRAFT || this == RETURNED;
     }
+
+    /**
+     * States that allow a student to attach additional files.
+     * GRADED is included so students can supplement a graded submission; the grade is preserved.
+     */
+    public boolean isUploadAllowed() {
+        return this == DRAFT || this == RETURNED || this == GRADED;
+    }
 }

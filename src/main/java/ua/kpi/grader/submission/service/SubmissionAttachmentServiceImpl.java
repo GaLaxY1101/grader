@@ -58,7 +58,7 @@ public class SubmissionAttachmentServiceImpl implements SubmissionAttachmentServ
         Submission submission = submissionAccess.getOrCreate(assignment, student);
         submission.initFileStateIfNeeded();
 
-        if (!submission.getFileState().isEditable()) {
+        if (!submission.getFileState().isUploadAllowed()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Submission is " + submission.getFileState() + "; upload not allowed");
         }
